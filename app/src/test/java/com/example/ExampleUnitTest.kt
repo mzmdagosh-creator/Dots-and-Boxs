@@ -1,12 +1,4 @@
 package com.example
-
-import com.example.model.BoardState
-import com.example.model.CampaignLevel
-import com.example.model.CpuDifficulty
-import com.example.model.DotsAndBoxesEngine
-import com.example.model.EdgeCoordinate
-import com.example.model.EdgeOrientation
-import com.example.model.GridSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals

@@ -2,9 +2,6 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.model.CampaignLevel
-import com.example.viewmodel.GameViewModel
-import com.example.viewmodel.ScreenDestination
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
