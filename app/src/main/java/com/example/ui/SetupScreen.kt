@@ -23,7 +23,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.outlined.GridOn
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
@@ -61,17 +64,21 @@ import com.example.ui.theme.Player1Cyan
 import com.example.ui.theme.Player1CyanFill
 import com.example.ui.theme.Player2Coral
 import com.example.ui.theme.Player2CoralFill
+import com.example.ui.theme.Player3Emerald
+import com.example.ui.theme.Player3EmeraldFill
+import com.example.ui.theme.Player4Violet
+import com.example.ui.theme.Player4VioletFill
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
 
 @Composable
 fun SetupScreen(
-    player1Input: String,
-    player2Input: String,
+    selectedPlayerCount: Int,
+    playerInputs: List<String>,
     errorResId: Int?,
-    onPlayer1Change: (String) -> Unit,
-    onPlayer2Change: (String) -> Unit,
+    onSelectPlayerCount: (Int) -> Unit,
+    onPlayerInputChange: (Int, String) -> Unit,
     onStartGame: () -> Unit,
     onOpenHtmlViewer: () -> Unit,
     modifier: Modifier = Modifier
@@ -94,11 +101,11 @@ fun SetupScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 560.dp)
+                .widthIn(max = 580.dp)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 18.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             // Hero Banner Card
             Card(
@@ -114,7 +121,7 @@ fun SetupScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(148.dp)
+                            .height(132.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_hero_dots_boxes),
@@ -127,7 +134,7 @@ fun SetupScreen(
                                 .align(Alignment.TopEnd)
                                 .padding(12.dp)
                                 .clip(RoundedCornerShape(50))
-                                .background(ObsidianBackground.copy(alpha = 0.82f))
+                                .background(ObsidianBackground.copy(alpha = 0.85f))
                                 .border(1.dp, SlateBorder, RoundedCornerShape(50))
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
@@ -142,7 +149,7 @@ fun SetupScreen(
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Text(
-                                    text = "5×9 DOTS • 4×8 BOXES",
+                                    text = "5×9 DOTS • 1–4 PLAYERS",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = DotWhite
                                 )
@@ -151,7 +158,7 @@ fun SetupScreen(
                     }
 
                     Column(
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -160,7 +167,7 @@ fun SetupScreen(
                             color = DotWhite,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = stringResource(R.string.setup_subtitle),
                             style = MaterialTheme.typography.bodyMedium,
@@ -171,7 +178,7 @@ fun SetupScreen(
                 }
             }
 
-            // Player Initials Configuration Card
+            // Player Count (1–4) & Initials Configuration Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -180,47 +187,153 @@ fun SetupScreen(
                 colors = CardDefaults.cardColors(containerColor = SlateSurface)
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.setup_card_header),
                         style = MaterialTheme.typography.titleLarge,
                         color = DotWhite
                     )
-                    Text(
-                        text = stringResource(R.string.setup_card_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MutedText,
-                        textAlign = TextAlign.Center
-                    )
 
+                    // 1 to 4 Players Selector Pills
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.player_count_label),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MutedText
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (count in 1..4) {
+                                val isSelected = selectedPlayerCount == count
+                                val pillAccent = when (count) {
+                                    1 -> Player1Cyan
+                                    2 -> Player2Coral
+                                    3 -> Player3Emerald
+                                    else -> Player4Violet
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(
+                                            if (isSelected) pillAccent else SlateSurfaceElevated
+                                        )
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) pillAccent else SlateBorder,
+                                            shape = RoundedCornerShape(14.dp)
+                                        )
+                                        .clickable { onSelectPlayerCount(count) }
+                                        .testTag("player_count_${count}_button"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (count == 1) Icons.Filled.SmartToy else Icons.Filled.Group,
+                                            contentDescription = null,
+                                            tint = if (isSelected) ObsidianBackground else pillAccent,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = if (count == 1) "1P vs AI" else "${count}P",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (isSelected) ObsidianBackground else DotWhite
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = if (selectedPlayerCount == 1) {
+                                stringResource(R.string.mode_1p_subtitle)
+                            } else {
+                                stringResource(R.string.mode_multi_subtitle, selectedPlayerCount)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Player1Cyan,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // Row 1: Player 1 and Player 2 (or AI Bot in 1P mode)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         PlayerInitialInputCard(
                             label = stringResource(R.string.player_one_label),
-                            value = player1Input,
+                            value = playerInputs.getOrElse(0) { "A" },
                             accentColor = Player1Cyan,
                             accentFill = Player1CyanFill,
-                            quickOptions = listOf("A", "X", "1", "C"),
+                            quickOptions = listOf("A", "X", "1", "P"),
                             testTag = "player1_letter_input",
-                            onValueChange = onPlayer1Change,
+                            onValueChange = { onPlayerInputChange(0, it) },
                             modifier = Modifier.weight(1f)
                         )
 
                         PlayerInitialInputCard(
-                            label = stringResource(R.string.player_two_label),
-                            value = player2Input,
+                            label = if (selectedPlayerCount == 1) {
+                                stringResource(R.string.player_two_ai_label)
+                            } else {
+                                stringResource(R.string.player_two_label)
+                            },
+                            value = playerInputs.getOrElse(1) { "B" },
                             accentColor = Player2Coral,
                             accentFill = Player2CoralFill,
-                            quickOptions = listOf("B", "O", "2", "R"),
+                            quickOptions = listOf("B", "O", "2", "Z"),
                             testTag = "player2_letter_input",
-                            onValueChange = onPlayer2Change,
+                            onValueChange = { onPlayerInputChange(1, it) },
                             modifier = Modifier.weight(1f)
                         )
+                    }
+
+                    // Row 2: Player 3 and Player 4 (shown when 3P or 4P is selected)
+                    AnimatedVisibility(visible = selectedPlayerCount >= 3) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            PlayerInitialInputCard(
+                                label = stringResource(R.string.player_three_label),
+                                value = playerInputs.getOrElse(2) { "C" },
+                                accentColor = Player3Emerald,
+                                accentFill = Player3EmeraldFill,
+                                quickOptions = listOf("C", "M", "3", "E"),
+                                testTag = "player3_letter_input",
+                                onValueChange = { onPlayerInputChange(2, it) },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            if (selectedPlayerCount == 4) {
+                                PlayerInitialInputCard(
+                                    label = stringResource(R.string.player_four_label),
+                                    value = playerInputs.getOrElse(3) { "D" },
+                                    accentColor = Player4Violet,
+                                    accentFill = Player4VioletFill,
+                                    quickOptions = listOf("D", "W", "4", "V"),
+                                    testTag = "player4_letter_input",
+                                    onValueChange = { onPlayerInputChange(3, it) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
 
                     AnimatedVisibility(visible = errorResId != null) {
@@ -241,7 +354,7 @@ fun SetupScreen(
                         onClick = onStartGame,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(54.dp)
                             .testTag("start_game_button"),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -337,9 +450,9 @@ private fun PlayerInitialInputCard(
             .clip(RoundedCornerShape(18.dp))
             .background(SlateSurfaceElevated)
             .border(1.5.dp, accentColor.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
-            .padding(14.dp),
+            .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
             text = label,
@@ -355,7 +468,7 @@ private fun PlayerInitialInputCard(
             textStyle = MaterialTheme.typography.headlineMedium.copy(
                 fontFamily = JetBrainsMonoFontFamily,
                 fontWeight = FontWeight.Bold,
-                fontSize = 28.sp,
+                fontSize = 26.sp,
                 textAlign = TextAlign.Center,
                 color = DotWhite
             ),
@@ -372,19 +485,19 @@ private fun PlayerInitialInputCard(
             ),
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier
-                .size(width = 84.dp, height = 68.dp)
+                .size(width = 76.dp, height = 64.dp)
                 .testTag(testTag)
         )
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             quickOptions.forEach { preset ->
                 val isSelected = value.equals(preset, ignoreCase = true)
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(if (isSelected) accentColor else ObsidianBackground)
                         .border(1.dp, if (isSelected) accentColor else SlateBorder, CircleShape)

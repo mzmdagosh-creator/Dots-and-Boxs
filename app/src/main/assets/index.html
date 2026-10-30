@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dots &amp; Boxes — 5x9 Grid</title>
+  <title>Dots &amp; Boxes — 5x9 Grid (1–4 Players + Combo Pulse)</title>
   <style>
     :root {
       --bg-primary: #0b1120;
@@ -16,10 +16,15 @@
       --p1-bg: rgba(34, 211, 238, 0.22);
       --p2-color: #fb7185;
       --p2-bg: rgba(251, 113, 133, 0.22);
+      --p3-color: #34d399;
+      --p3-bg: rgba(52, 211, 153, 0.22);
+      --p4-color: #c084fc;
+      --p4-bg: rgba(192, 132, 252, 0.22);
       --line-idle: #1e293b;
       --line-hover: #64748b;
-      --dot-size: 14px;
-      --box-size: 58px;
+      --dot-size: clamp(9px, 1.8vw, 13px);
+      --box-size: clamp(26px, 7.2vw, 48px);
+      --board-zoom: 1;
     }
 
     * {
@@ -38,83 +43,91 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      padding: 16px;
     }
 
     .hidden {
       display: none !important;
     }
 
-    /* Setup Screen */
     .setup-card {
       width: 100%;
-      max-width: 440px;
+      max-width: 480px;
       background: var(--bg-surface);
       border: 1px solid var(--border-muted);
       border-radius: 20px;
-      padding: 32px 28px;
+      padding: 28px 24px;
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
       text-align: center;
     }
 
     .setup-card h1 {
-      font-size: 2rem;
-      letter-spacing: -0.03em;
+      font-size: 1.9rem;
       margin-bottom: 6px;
     }
 
     .setup-card p.subtitle {
       color: var(--text-muted);
-      font-size: 0.92rem;
-      margin-bottom: 26px;
+      font-size: 0.9rem;
+      margin-bottom: 18px;
+    }
+
+    .count-selector {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .count-btn {
+      padding: 10px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border-muted);
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .count-btn.active {
+      background: var(--p1-color);
+      color: var(--bg-primary);
+      border-color: var(--p1-color);
     }
 
     .player-inputs {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 20px;
+      gap: 12px;
+      margin-bottom: 16px;
     }
 
     .input-group {
       background: var(--bg-elevated);
       border-radius: 14px;
-      padding: 16px 12px;
-      border: 2px solid transparent;
-      transition: border-color 0.2s ease;
-    }
-
-    .input-group.p1:focus-within {
-      border-color: var(--p1-color);
-    }
-
-    .input-group.p2:focus-within {
-      border-color: var(--p2-color);
+      padding: 12px;
+      border: 1px solid var(--border-muted);
     }
 
     .input-group label {
       display: block;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
-    .input-group.p1 label { color: var(--p1-color); }
-    .input-group.p2 label { color: var(--p2-color); }
-
     .letter-input {
-      width: 64px;
-      height: 64px;
+      width: 56px;
+      height: 56px;
       text-align: center;
-      font-size: 2rem;
+      font-size: 1.65rem;
       font-weight: 800;
       text-transform: uppercase;
       background: var(--bg-primary);
       color: var(--text-main);
       border: 1px solid var(--border-muted);
-      border-radius: 12px;
+      border-radius: 10px;
       outline: none;
     }
 
@@ -122,12 +135,12 @@
       color: #f87171;
       font-size: 0.85rem;
       min-height: 20px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .btn-primary {
       width: 100%;
-      padding: 14px 20px;
+      padding: 14px;
       border: none;
       border-radius: 12px;
       background: linear-gradient(135deg, var(--p1-color), #38bdf8);
@@ -135,132 +148,95 @@
       font-size: 1rem;
       font-weight: 800;
       cursor: pointer;
-      transition: transform 0.15s ease, filter 0.15s ease;
     }
 
-    .btn-primary:hover {
-      filter: brightness(1.08);
-      transform: translateY(-1px);
-    }
-
-    /* Game Screen & Scoreboard */
     .game-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 22px;
+      gap: 16px;
       width: 100%;
-      max-width: 760px;
+      max-width: 720px;
     }
 
     .scoreboard {
       display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+      gap: 10px;
       width: 100%;
       background: var(--bg-surface);
       border: 1px solid var(--border-muted);
       border-radius: 18px;
-      padding: 16px 20px;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      padding: 14px;
     }
 
     .player-card {
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 12px 16px;
-      border-radius: 14px;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 12px;
       background: var(--bg-elevated);
       border: 2px solid transparent;
-      transition: all 0.25s ease;
     }
 
-    .player-card.p2 {
-      flex-direction: row-reverse;
-      text-align: right;
+    .player-card.active {
+      border-color: var(--text-main);
     }
 
-    .player-card.active-p1 {
-      border-color: var(--p1-color);
-      box-shadow: 0 0 20px rgba(34, 211, 238, 0.28);
-    }
-
-    .player-card.active-p2 {
-      border-color: var(--p2-color);
-      box-shadow: 0 0 20px rgba(251, 113, 133, 0.28);
-    }
-
-    .badge {
-      width: 46px;
-      height: 46px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.45rem;
-      font-weight: 800;
-    }
-
-    .p1 .badge {
-      background: var(--p1-bg);
-      color: var(--p1-color);
-      border: 1px solid var(--p1-color);
-    }
-
-    .p2 .badge {
-      background: var(--p2-bg);
-      color: var(--p2-color);
-      border: 1px solid var(--p2-color);
-    }
-
-    .score-info .name {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    .score-info .score {
-      font-size: 1.65rem;
-      font-weight: 800;
-      line-height: 1.1;
-    }
-
-    .turn-status {
-      text-align: center;
-      padding: 0 8px;
-    }
-
-    .turn-pill {
-      display: inline-block;
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      background: var(--bg-elevated);
-      border: 1px solid var(--border-muted);
-    }
-
-    /* CSS Grid Board: 5x9 Dots => 9 Grid Rows x 17 Grid Columns */
     .board-wrapper {
       background: var(--bg-surface);
       border: 1px solid var(--border-muted);
       border-radius: 20px;
-      padding: 28px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
-      overflow-x: auto;
-      max-width: 100%;
+      padding: 18px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+    }
+
+    @keyframes comboZoomPulse {
+      0% { transform: scale(1); }
+      45% { transform: scale(1.055); box-shadow: 0 0 32px rgba(34, 211, 238, 0.45); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes boxComboPulse {
+      0% { transform: scale(1); filter: brightness(1); }
+      50% { transform: scale(1.16); filter: brightness(1.45); }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+
+    .board-wrapper.combo-zoom {
+      animation: comboZoomPulse 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .box.combo-pulse {
+      animation: boxComboPulse 0.45s ease-out;
+    }
+
+    .zoom-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .zoom-btn {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-muted);
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      cursor: pointer;
     }
 
     .board-grid {
       display: grid;
-      /* 9 columns of dots interleaved with 8 columns of boxes => 17 columns */
+      transform: scale(var(--board-zoom));
+      transform-origin: top center;
       grid-template-columns: repeat(8, var(--dot-size) var(--box-size)) var(--dot-size);
-      /* 5 rows of dots interleaved with 4 rows of boxes => 9 rows */
       grid-template-rows: repeat(4, var(--dot-size) var(--box-size)) var(--dot-size);
       align-items: center;
       justify-items: center;
@@ -271,51 +247,28 @@
       height: var(--dot-size);
       border-radius: 50%;
       background: var(--text-main);
-      box-shadow: 0 0 8px rgba(248, 250, 252, 0.4);
       z-index: 2;
     }
 
     .h-line {
       width: 100%;
-      height: 10px;
+      height: 7px;
       border-radius: 999px;
       background: var(--line-idle);
       cursor: pointer;
-      transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     }
 
     .v-line {
-      width: 10px;
+      width: 7px;
       height: 100%;
       border-radius: 999px;
       background: var(--line-idle);
       cursor: pointer;
-      transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     }
 
-    .h-line:not(.claimed):hover {
-      background: var(--line-hover);
-      transform: scaleY(1.35);
-    }
-
+    .h-line:not(.claimed):hover,
     .v-line:not(.claimed):hover {
       background: var(--line-hover);
-      transform: scaleX(1.35);
-    }
-
-    .h-line.claimed,
-    .v-line.claimed {
-      cursor: default;
-    }
-
-    .claimed-p1 {
-      background: var(--p1-color) !important;
-      box-shadow: 0 0 10px rgba(34, 211, 238, 0.55);
-    }
-
-    .claimed-p2 {
-      background: var(--p2-color) !important;
-      box-shadow: 0 0 10px rgba(251, 113, 133, 0.55);
     }
 
     .box {
@@ -324,124 +277,102 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.5rem;
       font-weight: 800;
       border-radius: 6px;
-      transition: background-color 0.25s ease, transform 0.2s ease;
     }
 
-    .box.captured-p1 {
-      background: var(--p1-bg);
-      color: var(--p1-color);
-    }
+    .claimed-p1 { background: var(--p1-color) !important; }
+    .claimed-p2 { background: var(--p2-color) !important; }
+    .claimed-p3 { background: var(--p3-color) !important; }
+    .claimed-p4 { background: var(--p4-color) !important; }
 
-    .box.captured-p2 {
-      background: var(--p2-bg);
-      color: var(--p2-color);
-    }
-
-    @media (max-width: 640px) {
-      :root {
-        --dot-size: 10px;
-        --box-size: 32px;
-      }
-      .board-wrapper { padding: 16px; }
-      .box { font-size: 1rem; }
-    }
+    .captured-p1 { background: var(--p1-bg); color: var(--p1-color); }
+    .captured-p2 { background: var(--p2-bg); color: var(--p2-color); }
+    .captured-p3 { background: var(--p3-bg); color: var(--p3-color); }
+    .captured-p4 { background: var(--p4-bg); color: var(--p4-color); }
   </style>
 </head>
 <body>
-
-  <!-- 1. Setup Screen -->
   <section id="setup-screen" class="setup-card">
     <h1>Dots &amp; Boxes</h1>
-    <p class="subtitle">5×9 Dot Grid (4×8 Playable Boxes)</p>
-    <div class="player-inputs">
-      <div class="input-group p1">
-        <label for="p1-letter">Player 1</label>
-        <input id="p1-letter" class="letter-input" type="text" maxlength="1" value="A" />
-      </div>
-      <div class="input-group p2">
-        <label for="p2-letter">Player 2</label>
-        <input id="p2-letter" class="letter-input" type="text" maxlength="1" value="B" />
-      </div>
+    <p class="subtitle">5×9 Dot Grid • 1 to 4 Players</p>
+    <div class="count-selector">
+      <button class="count-btn" data-count="1">1P vs AI</button>
+      <button class="count-btn active" data-count="2">2 Players</button>
+      <button class="count-btn" data-count="3">3 Players</button>
+      <button class="count-btn" data-count="4">4 Players</button>
     </div>
+    <div id="inputs-container" class="player-inputs"></div>
     <div id="setup-error" class="error-msg"></div>
     <button id="start-btn" class="btn-primary">Start Game</button>
   </section>
 
-  <!-- 2. Main Game Screen -->
   <main id="game-screen" class="game-container hidden">
-    <header class="scoreboard">
-      <div id="p1-card" class="player-card p1 active-p1">
-        <div id="p1-badge" class="badge">A</div>
-        <div class="score-info">
-          <div class="name">Player 1</div>
-          <div id="p1-score" class="score">0</div>
-        </div>
+    <header id="scoreboard" class="scoreboard"></header>
+    <div id="board-wrapper" class="board-wrapper">
+      <div class="zoom-bar">
+        <button id="zoom-out" class="zoom-btn">Zoom -</button>
+        <button id="zoom-reset" class="zoom-btn">Fit 100%</button>
+        <button id="zoom-in" class="zoom-btn">Zoom +</button>
       </div>
-
-      <div class="turn-status">
-        <span id="turn-indicator" class="turn-pill">P1's Turn</span>
-      </div>
-
-      <div id="p2-card" class="player-card p2">
-        <div id="p2-badge" class="badge">B</div>
-        <div class="score-info">
-          <div class="name">Player 2</div>
-          <div id="p2-score" class="score">0</div>
-        </div>
-      </div>
-    </header>
-
-    <div class="board-wrapper">
       <div id="board-grid" class="board-grid"></div>
     </div>
   </main>
 
   <script>
-    const DOT_ROWS = 5;
-    const DOT_COLS = 9;
-    const BOX_ROWS = DOT_ROWS - 1; // 4
-    const BOX_COLS = DOT_COLS - 1; // 8
-    const TOTAL_BOXES = BOX_ROWS * BOX_COLS; // 32
-
-    // 2D State Arrays for O(1) Edge Detection
-    let hEdges = []; // 5 rows x 8 cols
-    let vEdges = []; // 4 rows x 9 cols
-    let boxes = [];  // 4 rows x 8 cols (stores 0, 1, or 2)
-    let boxElements = []; // Direct DOM references to 4x8 box cells
-
+    const DOT_ROWS = 5, DOT_COLS = 9, BOX_ROWS = 4, BOX_COLS = 8;
+    let selectedMode = 2;
+    let activeCount = 2;
+    let letters = ['A', 'B', 'C', 'D'];
+    let scores = [0, 0, 0, 0];
     let currentPlayer = 1;
-    let scores = { 1: 0, 2: 0 };
-    let letters = { 1: 'A', 2: 'B' };
+    let comboCount = 0;
+    let comboBoxEls = [];
+    let hEdges = [], vEdges = [], boxes = [], boxElements = [];
+    let zoom = 1;
 
-    const setupScreen = document.getElementById('setup-screen');
-    const gameScreen = document.getElementById('game-screen');
-    const startBtn = document.getElementById('start-btn');
-    const setupError = document.getElementById('setup-error');
-    const boardGrid = document.getElementById('board-grid');
+    const inputsContainer = document.getElementById('inputs-container');
+    const countBtns = document.querySelectorAll('.count-btn');
+    const boardWrapper = document.getElementById('board-wrapper');
 
-    startBtn.addEventListener('click', () => {
-      const l1 = document.getElementById('p1-letter').value.trim().toUpperCase();
-      const l2 = document.getElementById('p2-letter').value.trim().toUpperCase();
+    function renderInputs() {
+      const count = selectedMode === 1 ? 2 : selectedMode;
+      inputsContainer.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const label = (selectedMode === 1 && i === 1) ? 'AI Bot' : `Player ${i + 1}`;
+        inputsContainer.innerHTML += `
+          <div class="input-group">
+            <label>${label}</label>
+            <input class="letter-input" data-idx="${i}" maxlength="1" value="${letters[i]}" />
+          </div>`;
+      }
+    }
 
-      if (!l1 || !l2) {
-        setupError.textContent = 'Both players must enter a single letter.';
+    countBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        countBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedMode = parseInt(btn.dataset.count, 10);
+        renderInputs();
+      });
+    });
+    renderInputs();
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+      const inputs = [...document.querySelectorAll('.letter-input')];
+      const vals = inputs.map(inp => inp.value.trim().toUpperCase());
+      if (vals.some(v => v.length !== 1)) {
+        document.getElementById('setup-error').textContent = 'Every player needs 1 letter.';
         return;
       }
-      if (l1 === l2) {
-        setupError.textContent = 'Players must choose distinct letters.';
+      if (new Set(vals).size !== vals.length) {
+        document.getElementById('setup-error').textContent = 'Letters must be unique.';
         return;
       }
-
-      letters[1] = l1;
-      letters[2] = l2;
-      document.getElementById('p1-badge').textContent = l1;
-      document.getElementById('p2-badge').textContent = l2;
-
-      setupScreen.classList.add('hidden');
-      gameScreen.classList.remove('hidden');
+      vals.forEach((v, idx) => letters[idx] = v);
+      activeCount = vals.length;
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('game-screen').classList.remove('hidden');
       initBoard();
     });
 
@@ -450,150 +381,118 @@
       vEdges = Array.from({ length: BOX_ROWS }, () => Array(DOT_COLS).fill(0));
       boxes = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(0));
       boxElements = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(null));
-      scores = { 1: 0, 2: 0 };
+      scores = [0, 0, 0, 0];
       currentPlayer = 1;
-      boardGrid.innerHTML = '';
+      comboCount = 0;
+      comboBoxEls = [];
+      const grid = document.getElementById('board-grid');
+      grid.innerHTML = '';
 
-      // 9 Grid Rows x 17 Grid Columns
-      const gridRows = DOT_ROWS * 2 - 1;
-      const gridCols = DOT_COLS * 2 - 1;
-
-      for (let r = 0; r < gridRows; r++) {
-        for (let c = 0; c < gridCols; c++) {
-          const isEvenRow = r % 2 === 0;
-          const isEvenCol = c % 2 === 0;
-
-          if (isEvenRow && isEvenCol) {
-            // Dot Node
-            const dot = document.createElement('div');
-            dot.className = 'dot';
-            boardGrid.appendChild(dot);
-          } else if (isEvenRow && !isEvenCol) {
-            // Horizontal Line at (r/2, (c-1)/2)
-            const hr = r / 2;
-            const hc = (c - 1) / 2;
-            const hLine = document.createElement('div');
-            hLine.className = 'h-line';
-            hLine.addEventListener('click', () => handleHorizontalClick(hr, hc, hLine));
-            boardGrid.appendChild(hLine);
-          } else if (!isEvenRow && isEvenCol) {
-            // Vertical Line at ((r-1)/2, c/2)
-            const vr = (r - 1) / 2;
-            const vc = c / 2;
-            const vLine = document.createElement('div');
-            vLine.className = 'v-line';
-            vLine.addEventListener('click', () => handleVerticalClick(vr, vc, vLine));
-            boardGrid.appendChild(vLine);
+      for (let r = 0; r < DOT_ROWS * 2 - 1; r++) {
+        for (let c = 0; c < DOT_COLS * 2 - 1; c++) {
+          const el = document.createElement('div');
+          if (r % 2 === 0 && c % 2 === 0) {
+            el.className = 'dot';
+          } else if (r % 2 === 0) {
+            el.className = 'h-line';
+            const hr = r / 2, hc = (c - 1) / 2;
+            el.addEventListener('click', () => handleMove('H', hr, hc, el));
+          } else if (c % 2 === 0) {
+            el.className = 'v-line';
+            const vr = (r - 1) / 2, vc = c / 2;
+            el.addEventListener('click', () => handleMove('V', vr, vc, el));
           } else {
-            // Playable Box at ((r-1)/2, (c-1)/2)
-            const br = (r - 1) / 2;
-            const bc = (c - 1) / 2;
-            const box = document.createElement('div');
-            box.className = 'box';
-            boxElements[br][bc] = box;
-            boardGrid.appendChild(box);
+            el.className = 'box';
+            boxElements[(r - 1) / 2][(c - 1) / 2] = el;
           }
+          grid.appendChild(el);
         }
       }
       updateScoreboard();
     }
 
-    /**
-     * Edge-Detection Logic for Horizontal Lines:
-     * A horizontal edge at (r, c) borders at most two boxes:
-     * - The box directly ABOVE it at (r - 1, c), if r > 0
-     * - The box directly BELOW it at (r, c), if r < BOX_ROWS
-     */
-    function handleHorizontalClick(r, c, element) {
-      if (hEdges[r][c] !== 0) return;
-      hEdges[r][c] = currentPlayer;
-      markLineClaimed(element);
+    function handleMove(type, r, c, el) {
+      if (type === 'H') {
+        if (hEdges[r][c] !== 0) return;
+        hEdges[r][c] = currentPlayer;
+      } else {
+        if (vEdges[r][c] !== 0) return;
+        vEdges[r][c] = currentPlayer;
+      }
+      el.classList.add('claimed', `claimed-p${currentPlayer}`);
 
-      let capturedCount = 0;
-      if (r > 0 && checkAndCaptureBox(r - 1, c)) capturedCount++;
-      if (r < BOX_ROWS && checkAndCaptureBox(r, c)) capturedCount++;
+      let captured = 0;
+      if (type === 'H') {
+        if (r > 0 && checkBox(r - 1, c)) captured++;
+        if (r < BOX_ROWS && checkBox(r, c)) captured++;
+      } else {
+        if (c > 0 && checkBox(r, c - 1)) captured++;
+        if (c < BOX_COLS && checkBox(r, c)) captured++;
+      }
 
-      finalizeTurn(capturedCount);
+      if (captured > 0) {
+        comboCount += captured;
+        if (comboCount >= 2) {
+          triggerComboPulseAndZoom();
+        }
+      } else {
+        comboCount = 0;
+        comboBoxEls = [];
+        currentPlayer = (currentPlayer % activeCount) + 1;
+      }
+      updateScoreboard();
     }
 
-    /**
-     * Edge-Detection Logic for Vertical Lines:
-     * A vertical edge at (r, c) borders at most two boxes:
-     * - The box directly to its LEFT at (r, c - 1), if c > 0
-     * - The box directly to its RIGHT at (r, c), if c < BOX_COLS
-     */
-    function handleVerticalClick(r, c, element) {
-      if (vEdges[r][c] !== 0) return;
-      vEdges[r][c] = currentPlayer;
-      markLineClaimed(element);
-
-      let capturedCount = 0;
-      if (c > 0 && checkAndCaptureBox(r, c - 1)) capturedCount++;
-      if (c < BOX_COLS && checkAndCaptureBox(r, c)) capturedCount++;
-
-      finalizeTurn(capturedCount);
-    }
-
-    /**
-     * Checks whether all 4 bounding edges of box (br, bc) are claimed:
-     * Top: hEdges[br][bc], Bottom: hEdges[br + 1][bc],
-     * Left: vEdges[br][bc], Right: vEdges[br][bc + 1]
-     */
-    function checkAndCaptureBox(br, bc) {
+    function checkBox(br, bc) {
       if (boxes[br][bc] !== 0) return false;
-      const isComplete =
-        hEdges[br][bc] !== 0 &&
-        hEdges[br + 1][bc] !== 0 &&
-        vEdges[br][bc] !== 0 &&
-        vEdges[br][bc + 1] !== 0;
-
-      if (isComplete) {
+      if (hEdges[br][bc] && hEdges[br + 1][bc] && vEdges[br][bc] && vEdges[br][bc + 1]) {
         boxes[br][bc] = currentPlayer;
-        scores[currentPlayer] += 1;
+        scores[currentPlayer - 1]++;
         const boxEl = boxElements[br][bc];
-        boxEl.textContent = letters[currentPlayer];
-        boxEl.classList.add(currentPlayer === 1 ? 'captured-p1' : 'captured-p2');
+        boxEl.textContent = letters[currentPlayer - 1];
+        boxEl.classList.add(`captured-p${currentPlayer}`);
+        comboBoxEls.push(boxEl);
         return true;
       }
       return false;
     }
 
-    function markLineClaimed(element) {
-      element.classList.add('claimed', currentPlayer === 1 ? 'claimed-p1' : 'claimed-p2');
-    }
-
-    function finalizeTurn(capturedCount) {
-      // Only switch players if NO box was captured on this move.
-      // Capturing 1 or 2 boxes grants 1 mandatory extra turn.
-      if (capturedCount === 0) {
-        currentPlayer = currentPlayer === 1 ? 2 : 1;
-      }
-      updateScoreboard();
+    function triggerComboPulseAndZoom() {
+      boardWrapper.classList.remove('combo-zoom');
+      void boardWrapper.offsetWidth;
+      boardWrapper.classList.add('combo-zoom');
+      comboBoxEls.forEach(boxEl => {
+        boxEl.classList.remove('combo-pulse');
+        void boxEl.offsetWidth;
+        boxEl.classList.add('combo-pulse');
+      });
     }
 
     function updateScoreboard() {
-      document.getElementById('p1-score').textContent = scores[1];
-      document.getElementById('p2-score').textContent = scores[2];
-
-      const p1Card = document.getElementById('p1-card');
-      const p2Card = document.getElementById('p2-card');
-      const indicator = document.getElementById('turn-indicator');
-
-      p1Card.classList.toggle('active-p1', currentPlayer === 1);
-      p2Card.classList.toggle('active-p2', currentPlayer === 2);
-
-      if (scores[1] + scores[2] === TOTAL_BOXES) {
-        if (scores[1] > scores[2]) {
-          indicator.textContent = `Player 1 (${letters[1]}) Wins!`;
-        } else if (scores[2] > scores[1]) {
-          indicator.textContent = `Player 2 (${letters[2]}) Wins!`;
-        } else {
-          indicator.textContent = 'Draw Game!';
-        }
-      } else {
-        indicator.textContent = `P${currentPlayer}'s Turn (${letters[currentPlayer]})`;
+      const sb = document.getElementById('scoreboard');
+      sb.innerHTML = '';
+      for (let i = 0; i < activeCount; i++) {
+        const isTurn = currentPlayer === i + 1;
+        sb.innerHTML += `
+          <div class="player-card ${isTurn ? 'active' : ''}">
+            <strong>P${i + 1} (${letters[i]})</strong>
+            <span>${scores[i]}</span>
+          </div>`;
       }
     }
+
+    document.getElementById('zoom-out').onclick = () => {
+      zoom = Math.max(0.65, zoom - 0.1);
+      document.documentElement.style.setProperty('--board-zoom', zoom);
+    };
+    document.getElementById('zoom-in').onclick = () => {
+      zoom = Math.min(1.35, zoom + 0.1);
+      document.documentElement.style.setProperty('--board-zoom', zoom);
+    };
+    document.getElementById('zoom-reset').onclick = () => {
+      zoom = 1;
+      document.documentElement.style.setProperty('--board-zoom', zoom);
+    };
   </script>
 </body>
 </html>

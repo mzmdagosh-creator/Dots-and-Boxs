@@ -54,11 +54,11 @@ fun DotsAndBoxesApp(
             when (destination) {
                 ScreenDestination.SETUP -> {
                     SetupScreen(
-                        player1Input = uiState.player1Input,
-                        player2Input = uiState.player2Input,
+                        selectedPlayerCount = uiState.selectedPlayerCount,
+                        playerInputs = uiState.playerInputs,
                         errorResId = uiState.setupErrorResId,
-                        onPlayer1Change = viewModel::updatePlayer1Input,
-                        onPlayer2Change = viewModel::updatePlayer2Input,
+                        onSelectPlayerCount = viewModel::selectPlayerCount,
+                        onPlayerInputChange = viewModel::updatePlayerInput,
                         onStartGame = {
                             viewModel.startGame(
                                 emptyErrorResId = R.string.error_empty_letter,
@@ -73,8 +73,11 @@ fun DotsAndBoxesApp(
                     GameScreen(
                         boardState = uiState.boardState,
                         hoveredEdge = uiState.hoveredEdge,
+                        boardZoom = uiState.boardZoom,
                         onEdgeHover = viewModel::onEdgeHovered,
                         onEdgeClick = viewModel::onEdgeClicked,
+                        onAdjustZoom = viewModel::adjustZoom,
+                        onSetZoom = viewModel::setZoom,
                         onRestartMatch = viewModel::restartMatch,
                         onReturnToSetup = viewModel::returnToSetup,
                         onOpenHtmlViewer = { viewModel.toggleHtmlDialog(true) }

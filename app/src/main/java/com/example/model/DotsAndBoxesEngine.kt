@@ -1,7 +1,9 @@
 package com.example.model
 
 /**
- * Pure Kotlin 2D-array engine for the 5x9 Dots and Boxes board game.
+ * Pure Kotlin 2D-array engine for the 5x9 Dots and Boxes board game supporting 1 to 4 players
+ * (including a smart single-player AI opponent when `humanPlayerCount == 1`) and
+ * multi-square round combo tracking (`currentComboCount`, `comboChainBoxes`, `comboTriggerId`).
  *
  * Grid Geometry:
  * - 5 rows by 9 columns of dots (`DOT_ROWS = 5`, `DOT_COLS = 9`)
@@ -25,6 +27,12 @@ data class BoxCoordinate(
     val col: Int
 )
 
+data class PlayerConfig(
+    val playerNumber: Int, // 1..4
+    val letter: String,
+    val isAi: Boolean = false
+)
+
 data class MoveOutcome(
     val newState: BoardState,
     val capturedBoxes: List<BoxCoordinate>,
@@ -32,37 +40,75 @@ data class MoveOutcome(
 )
 
 data class BoardState(
-    val player1Letter: String = "A",
-    val player2Letter: String = "B",
-    val currentPlayer: Int = 1, // 1 or 2
-    val player1Score: Int = 0,
-    val player2Score: Int = 0,
-    // 5 rows x 8 cols: 0 = unclaimed, 1 = claimed by P1, 2 = claimed by P2
+    val humanPlayerCount: Int = 2, // 1..4 configured by user
+    val players: List<PlayerConfig> = listOf(
+        PlayerConfig(1, "A", isAi = false),
+        PlayerConfig(2, "B", isAi = false)
+    ),
+    val currentPlayer: Int = 1, // 1..players.size
+    val scores: Map<Int, Int> = mapOf(1 to 0, 2 to 0),
+    // 5 rows x 8 cols: 0 = unclaimed, 1..4 = claimed by Player N
     val horizontalEdges: List<List<Int>> = List(DOT_ROWS) { List(BOX_COLS) { 0 } },
-    // 4 rows x 9 cols: 0 = unclaimed, 1 = claimed by P1, 2 = claimed by P2
+    // 4 rows x 9 cols: 0 = unclaimed, 1..4 = claimed by Player N
     val verticalEdges: List<List<Int>> = List(BOX_ROWS) { List(DOT_COLS) { 0 } },
-    // 4 rows x 8 cols: 0 = unclaimed, 1 = captured by P1, 2 = captured by P2
+    // 4 rows x 8 cols: 0 = unclaimed, 1..4 = captured by Player N
     val boxes: List<List<Int>> = List(BOX_ROWS) { List(BOX_COLS) { 0 } },
     val lastClaimedEdge: EdgeCoordinate? = null,
     val lastCapturedBoxes: Set<BoxCoordinate> = emptySet(),
+    val comboChainBoxes: Set<BoxCoordinate> = emptySet(),
+    val currentComboCount: Int = 0,
+    val comboTriggerId: Int = 0,
     val hasExtraTurnStreak: Boolean = false,
     val totalMovesPlayed: Int = 0
 ) {
+    val activePlayerCount: Int
+        get() = players.size
+
+    val player1Letter: String
+        get() = letterForPlayer(1)
+
+    val player2Letter: String
+        get() = letterForPlayer(2)
+
+    val player1Score: Int
+        get() = scoreForPlayer(1)
+
+    val player2Score: Int
+        get() = scoreForPlayer(2)
+
     val totalClaimedBoxes: Int
-        get() = player1Score + player2Score
+        get() = scores.values.sum()
 
     val isGameOver: Boolean
         get() = totalClaimedBoxes == TOTAL_BOXES
 
+    val isMultiSquareCombo: Boolean
+        get() = currentComboCount >= 2
+
+    val isCurrentPlayerAi: Boolean
+        get() = !isGameOver && players.firstOrNull { it.playerNumber == currentPlayer }?.isAi == true
+
+    /**
+     * Returns winning player number (1..4), or 0 if tied for first place, or null if game not over.
+     */
     val winner: Int?
-        get() = when {
-            !isGameOver -> null
-            player1Score > player2Score -> 1
-            player2Score > player1Score -> 2
-            else -> 0 // Draw
+        get() {
+            if (!isGameOver) return null
+            val maxScore = scores.values.maxOrNull() ?: 0
+            val topPlayers = scores.filterValues { it == maxScore }.keys
+            return if (topPlayers.size == 1) topPlayers.first() else 0
         }
 
-    fun letterForPlayer(player: Int): String = if (player == 1) player1Letter else player2Letter
+    val maxScore: Int
+        get() = scores.values.maxOrNull() ?: 0
+
+    fun letterForPlayer(player: Int): String =
+        players.firstOrNull { it.playerNumber == player }?.letter ?: player.toString()
+
+    fun scoreForPlayer(player: Int): Int = scores[player] ?: 0
+
+    fun isPlayerAi(player: Int): Boolean =
+        players.firstOrNull { it.playerNumber == player }?.isAi == true
 
     companion object {
         const val DOT_ROWS = 5
@@ -70,6 +116,43 @@ data class BoardState(
         const val BOX_ROWS = DOT_ROWS - 1 // 4
         const val BOX_COLS = DOT_COLS - 1 // 8
         const val TOTAL_BOXES = BOX_ROWS * BOX_COLS // 32
+
+        fun create(
+            humanPlayerCount: Int,
+            letters: List<String>
+        ): BoardState {
+            val coercedCount = humanPlayerCount.coerceIn(1, 4)
+            val playerConfigs = if (coercedCount == 1) {
+                // 1 Player mode: Player 1 (Human) vs Player 2 (Smart AI)
+                val p1Letter = letters.getOrNull(0)?.ifBlank { "A" } ?: "A"
+                val aiDefault = letters.getOrNull(1)?.ifBlank { "C" } ?: "C"
+                val aiLetter = if (aiDefault.equals(p1Letter, ignoreCase = true)) {
+                    if (p1Letter == "X") "O" else "X"
+                } else {
+                    aiDefault
+                }
+                listOf(
+                    PlayerConfig(1, p1Letter, isAi = false),
+                    PlayerConfig(2, aiLetter, isAi = true)
+                )
+            } else {
+                (1..coercedCount).map { idx ->
+                    val fallback = ('A' + (idx - 1)).toString()
+                    PlayerConfig(
+                        playerNumber = idx,
+                        letter = letters.getOrNull(idx - 1)?.ifBlank { fallback } ?: fallback,
+                        isAi = false
+                    )
+                }
+            }
+
+            return BoardState(
+                humanPlayerCount = coercedCount,
+                players = playerConfigs,
+                currentPlayer = 1,
+                scores = playerConfigs.associate { it.playerNumber to 0 }
+            )
+        }
     }
 }
 
@@ -79,21 +162,14 @@ object DotsAndBoxesEngine {
      * Claims an unclaimed horizontal or vertical edge and performs O(1) adjacent-box
      * edge detection using the 2D arrays rather than scanning the entire board.
      *
-     * Edge-Detection Logic:
-     * 1. Horizontal edge at (r, c):
-     *    - Borders the box ABOVE at (r - 1, c) when r > 0.
-     *    - Borders the box BELOW at (r, c) when r < BOX_ROWS (4).
-     * 2. Vertical edge at (r, c):
-     *    - Borders the box to the LEFT at (r, c - 1) when c > 0.
-     *    - Borders the box to the RIGHT at (r, c) when c < BOX_COLS (8).
-     * 3. A box at (br, bc) is completed if and only if all 4 of its perimeter lines are non-zero:
-     *    - Top:    horizontalEdges[br][bc] != 0
-     *    - Bottom: horizontalEdges[br + 1][bc] != 0
-     *    - Left:   verticalEdges[br][bc] != 0
-     *    - Right:  verticalEdges[br][bc + 1] != 0
-     * 4. If 1 or 2 boxes are completed by this single line, all completed boxes are awarded to
-     *    `currentPlayer`, their score increases by `captured.size` (1 or 2), and `currentPlayer`
-     *    retains the turn (one mandatory extra turn).
+     * Combo & Multi-Square Round Tracking:
+     * - Whenever a player completes 1 or 2 boxes, `currentComboCount` increases by `capturedCount`
+     *   and `comboChainBoxes` accumulates all boxes captured by this player during the current round.
+     * - When `currentComboCount >= 2` (either via a simultaneous 2-box double capture OR consecutive
+     *   captures across extra turns in the same round), `isMultiSquareCombo` becomes true and
+     *   `comboTriggerId` increments so the UI triggers a synchronized pulse + small camera zoom!
+     * - When a move captures 0 boxes, `currentComboCount` resets to 0, `comboChainBoxes` clears,
+     *   and the turn advances cyclically: `(currentPlayer % activePlayerCount) + 1`.
      */
     fun makeMove(state: BoardState, edge: EdgeCoordinate): MoveOutcome? {
         if (state.isGameOver) return null
@@ -109,16 +185,13 @@ object DotsAndBoxesEngine {
                 if (edge.row !in 0 until BoardState.DOT_ROWS || edge.col !in 0 until BoardState.BOX_COLS) {
                     return null
                 }
-                // Ignore if already claimed
                 if (hMutable[edge.row][edge.col] != 0) return null
 
                 hMutable[edge.row][edge.col] = state.currentPlayer
 
-                // Check adjacent box above (row - 1, col)
                 if (edge.row > 0) {
                     candidateBoxes.add(BoxCoordinate(edge.row - 1, edge.col))
                 }
-                // Check adjacent box below (row, col)
                 if (edge.row < BoardState.BOX_ROWS) {
                     candidateBoxes.add(BoxCoordinate(edge.row, edge.col))
                 }
@@ -128,16 +201,13 @@ object DotsAndBoxesEngine {
                 if (edge.row !in 0 until BoardState.BOX_ROWS || edge.col !in 0 until BoardState.DOT_COLS) {
                     return null
                 }
-                // Ignore if already claimed
                 if (vMutable[edge.row][edge.col] != 0) return null
 
                 vMutable[edge.row][edge.col] = state.currentPlayer
 
-                // Check adjacent box to the left (row, col - 1)
                 if (edge.col > 0) {
                     candidateBoxes.add(BoxCoordinate(edge.row, edge.col - 1))
                 }
-                // Check adjacent box to the right (row, col)
                 if (edge.col < BoardState.BOX_COLS) {
                     candidateBoxes.add(BoxCoordinate(edge.row, edge.col))
                 }
@@ -155,26 +225,41 @@ object DotsAndBoxesEngine {
         }
 
         val capturedCount = newlyCaptured.size
-        val newP1Score = state.player1Score + if (state.currentPlayer == 1) capturedCount else 0
-        val newP2Score = state.player2Score + if (state.currentPlayer == 2) capturedCount else 0
+        val updatedScores = state.scores.toMutableMap()
+        updatedScores[state.currentPlayer] =
+            (updatedScores[state.currentPlayer] ?: 0) + capturedCount
 
-        // Grant a mandatory extra turn if at least 1 box was captured; otherwise switch player
+        // Grant a mandatory extra turn if at least 1 box was captured; otherwise advance to next player (1..N)
         val grantedExtraTurn = capturedCount > 0
         val nextPlayer = if (grantedExtraTurn) {
             state.currentPlayer
         } else {
-            if (state.currentPlayer == 1) 2 else 1
+            (state.currentPlayer % state.activePlayerCount) + 1
+        }
+
+        val newComboCount = if (grantedExtraTurn) state.currentComboCount + capturedCount else 0
+        val newComboChain = if (grantedExtraTurn) {
+            state.comboChainBoxes + newlyCaptured
+        } else {
+            emptySet()
+        }
+        val newComboTriggerId = if (grantedExtraTurn) {
+            state.comboTriggerId + 1
+        } else {
+            state.comboTriggerId
         }
 
         val updatedState = state.copy(
             currentPlayer = nextPlayer,
-            player1Score = newP1Score,
-            player2Score = newP2Score,
+            scores = updatedScores,
             horizontalEdges = hMutable.map { it.toList() },
             verticalEdges = vMutable.map { it.toList() },
             boxes = boxesMutable.map { it.toList() },
             lastClaimedEdge = edge,
             lastCapturedBoxes = newlyCaptured.toSet(),
+            comboChainBoxes = newComboChain,
+            currentComboCount = newComboCount,
+            comboTriggerId = newComboTriggerId,
             hasExtraTurnStreak = grantedExtraTurn,
             totalMovesPlayed = state.totalMovesPlayed + 1
         )
@@ -186,16 +271,102 @@ object DotsAndBoxesEngine {
         )
     }
 
+    /**
+     * Smart AI move selector for 1-Player mode:
+     * 1. Priority 1: Any move that immediately captures 2 boxes (double-capture combo).
+     * 2. Priority 2: Any move that immediately captures 1 box.
+     * 3. Priority 3: "Safe" moves that do not create a 3-sided box for the opponent.
+     * 4. Priority 4: Fallback to any available edge if all remaining moves give a 3rd edge.
+     */
+    fun chooseSmartAiMove(state: BoardState): EdgeCoordinate? {
+        if (state.isGameOver) return null
+
+        val availableEdges = mutableListOf<EdgeCoordinate>()
+        for (r in 0 until BoardState.DOT_ROWS) {
+            for (c in 0 until BoardState.BOX_COLS) {
+                if (state.horizontalEdges[r][c] == 0) {
+                    availableEdges.add(EdgeCoordinate(EdgeOrientation.HORIZONTAL, r, c))
+                }
+            }
+        }
+        for (r in 0 until BoardState.BOX_ROWS) {
+            for (c in 0 until BoardState.DOT_COLS) {
+                if (state.verticalEdges[r][c] == 0) {
+                    availableEdges.add(EdgeCoordinate(EdgeOrientation.VERTICAL, r, c))
+                }
+            }
+        }
+        if (availableEdges.isEmpty()) return null
+
+        var bestCaptureEdge: EdgeCoordinate? = null
+        var bestCaptureCount = 0
+        val safeEdges = mutableListOf<EdgeCoordinate>()
+
+        for (edge in availableEdges) {
+            val adjacentBoxes = getAdjacentBoxes(edge)
+            var completesCount = 0
+            var createsThirdSide = false
+
+            for (box in adjacentBoxes) {
+                val currentSides = countClaimedSides(
+                    box.row,
+                    box.col,
+                    state.horizontalEdges,
+                    state.verticalEdges
+                )
+                if (currentSides == 3) {
+                    completesCount++
+                } else if (currentSides == 2) {
+                    createsThirdSide = true
+                }
+            }
+
+            if (completesCount > bestCaptureCount) {
+                bestCaptureCount = completesCount
+                bestCaptureEdge = edge
+            } else if (completesCount == 0 && !createsThirdSide) {
+                safeEdges.add(edge)
+            }
+        }
+
+        if (bestCaptureEdge != null) return bestCaptureEdge
+        if (safeEdges.isNotEmpty()) return safeEdges.random()
+        return availableEdges.random()
+    }
+
+    private fun getAdjacentBoxes(edge: EdgeCoordinate): List<BoxCoordinate> {
+        val result = mutableListOf<BoxCoordinate>()
+        when (edge.orientation) {
+            EdgeOrientation.HORIZONTAL -> {
+                if (edge.row > 0) result.add(BoxCoordinate(edge.row - 1, edge.col))
+                if (edge.row < BoardState.BOX_ROWS) result.add(BoxCoordinate(edge.row, edge.col))
+            }
+            EdgeOrientation.VERTICAL -> {
+                if (edge.col > 0) result.add(BoxCoordinate(edge.row, edge.col - 1))
+                if (edge.col < BoardState.BOX_COLS) result.add(BoxCoordinate(edge.row, edge.col))
+            }
+        }
+        return result
+    }
+
+    private fun countClaimedSides(
+        boxRow: Int,
+        boxCol: Int,
+        hEdges: List<List<Int>>,
+        vEdges: List<List<Int>>
+    ): Int {
+        var count = 0
+        if (hEdges[boxRow][boxCol] != 0) count++
+        if (hEdges[boxRow + 1][boxCol] != 0) count++
+        if (vEdges[boxRow][boxCol] != 0) count++
+        if (vEdges[boxRow][boxCol + 1] != 0) count++
+        return count
+    }
+
     private fun isBoxCompleted(
         boxRow: Int,
         boxCol: Int,
         hEdges: List<List<Int>>,
         vEdges: List<List<Int>>
-    ): Boolean {
-        val top = hEdges[boxRow][boxCol] != 0
-        val bottom = hEdges[boxRow + 1][boxCol] != 0
-        val left = vEdges[boxRow][boxCol] != 0
-        val right = vEdges[boxRow][boxCol + 1] != 0
-        return top && bottom && left && right
-    }
+    ): Boolean = countClaimedSides(boxRow, boxCol, hEdges, vEdges) == 4
 }
