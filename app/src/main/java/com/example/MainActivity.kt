@@ -1219,7 +1219,7 @@ enum class AchievementProtocol(val id: String, val title: String, val descriptio
     GHOST_IN_MACHINE("ach_ghost_machine", "Ghost in the Machine", "Shut out the CPU (Win a match where the AI scores 0)"),
     GRID_MASTER("ach_grid_master", "Grid Master", "Play a total of 50 matches"),
     SYSTEM_FREEZE("ach_system_freeze", "System Freeze", "Win a Blitz match without letting the timer drop below 50%", true)
-
+}
 
 enum class ScreenDestination {
     SETUP,          // Screen 1: The Command Center (Main Menu)
