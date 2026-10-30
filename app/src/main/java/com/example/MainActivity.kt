@@ -5780,3 +5780,39 @@ private fun FullScreenVictoryAnimationOverlay(
         }
     }
 }
+// ... your other code above ...
+
+@Composable
+fun SomeOtherFunction() {
+    // ...
+}
+// ^ This is the end of your existing code
+
+// Paste the new AI object right here, completely on its own!
+
+object NeonAiEngine {
+    
+    private const val MAX_DEPTH = 3 
+
+    suspend fun calculateHardMove(
+        // ... the rest of the AI code ...
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+
+fun triggerAiTurn() {
+    if (uiState.value.selectedCpuDifficulty == CpuDifficulty.HARD) {
+        // Launch a background thread
+        viewModelScope.launch {
+            // The UI will stay perfectly smooth while this runs
+            val bestMove = NeonAiEngine.calculateHardMove(
+                availableLines = uiState.value.getEmptyLines(),
+                currentAiScore = uiState.value.aiScore,
+                currentPlayerScore = uiState.value.playerScore,
+                boardState = uiState.value.boardState
+            )
+            
+            // Once the AI figures out the move, apply it
+            bestMove?.let { applyMoveToBoard(it) }
+        }
+    }
+}
