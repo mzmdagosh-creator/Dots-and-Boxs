@@ -151,10 +151,8 @@ fun DotsAndBoxesApp(
                             selectedCpuDifficulty = uiState.selectedCpuDifficulty,
                             selectedTimerMode = uiState.selectedTimerMode,
                             selectedPlayerCount = uiState.selectedPlayerCount,
-                            playerInputs = uiState.playerInputs,
                             sessionStats = uiState.sessionStats,
                             matchHistory = uiState.matchHistory,
-                            errorResId = uiState.setupErrorResId,
                             onResumeTournament = viewModel::resumeTournament,
                             onSelectMainMenuSection = viewModel::selectMainMenuSection,
                             onSelectCampaignLevel = viewModel::selectCampaignLevel,
@@ -164,13 +162,7 @@ fun DotsAndBoxesApp(
                             onSelectCpuDifficulty = viewModel::selectCpuDifficulty,
                             onSelectTimerMode = viewModel::selectTimerMode,
                             onSelectPlayerCount = viewModel::selectPlayerCount,
-                            onPlayerInputChange = viewModel::updatePlayerInput,
-                            onStartCustomGame = {
-                                viewModel.startGame(
-                                    emptyErrorResId = R.string.error_empty_letter,
-                                    sameLetterErrorResId = R.string.error_same_letter
-                                )
-                            }
+                            onStartCustomGame = { viewModel.startGame() }
                         )
                     }
 
