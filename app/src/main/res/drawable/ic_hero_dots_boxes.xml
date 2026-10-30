@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp"
+    android:height="140dp"
+    android:viewportWidth="320"
+    android:viewportHeight="140">
+    <path android:pathData="M0,0h320v140h-320z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="320"
+                android:endY="140"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#0F172A" />
+                <item android:offset="0.5" android:color="#152238" />
+                <item android:offset="1.0" android:color="#1E1B4B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Decorative Subtle Grid Lines -->
+    <path
+        android:strokeColor="#1E293B"
+        android:strokeWidth="2"
+        android:pathData="M40,25 L280,25 M40,70 L280,70 M40,115 L280,115 M40,25 L40,115 M100,25 L100,115 M160,25 L160,115 M220,25 L220,115 M280,25 L280,115" />
+    <!-- Captured Cyan Box -->
+    <path
+        android:fillColor="#2822D3EE"
+        android:pathData="M100,25h60v45h-60z" />
+    <path
+        android:strokeColor="#22D3EE"
+        android:strokeWidth="4"
+        android:pathData="M100,25h60v45h-60z" />
+    <!-- Captured Coral Box -->
+    <path
+        android:fillColor="#28FB7185"
+        android:pathData="M160,70h60v45h-60z" />
+    <path
+        android:strokeColor="#FB7185"
+        android:strokeWidth="4"
+        android:pathData="M160,70h60v45h-60z" />
+    <!-- Active In-Progress Edges -->
+    <path
+        android:strokeColor="#22D3EE"
+        android:strokeWidth="4"
+        android:pathData="M160,25 L220,25 M220,25 L220,70" />
+    <path
+        android:strokeColor="#FB7185"
+        android:strokeWidth="4"
+        android:pathData="M100,70 L100,115 M100,115 L160,115" />
+    <!-- Grid Nodes (Dots) -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M40,25m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0 M100,25m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M160,25m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M220,25m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M280,25m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0 M40,70m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0 M100,70m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M160,70m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M220,70m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M280,70m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0 M40,115m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0 M100,115m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M160,115m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M220,115m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M280,115m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>

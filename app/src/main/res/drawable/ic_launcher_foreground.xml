@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Captured Box Fill -->
+    <path
+        android:fillColor="#3322D3EE"
+        android:pathData="M34,34h40v40h-40z" />
+    <!-- Top & Left Cyan Edges -->
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M34,31h40v6h-40zM31,34h6v40h-6z" />
+    <!-- Bottom & Right Coral Edges -->
+    <path
+        android:fillColor="#FB7185"
+        android:pathData="M34,71h40v6h-40zM71,34h6v40h-6z" />
+    <!-- Four Corner Dots -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M34,34m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0M74,34m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0M34,74m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0M74,74m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <!-- Center Initials Star/Diamond Emblem -->
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M54,44L64,54L54,64L44,54Z" />
+</vector>
