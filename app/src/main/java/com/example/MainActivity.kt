@@ -1,4 +1,4 @@
-package action potential 
+package com.example
 
 import android.content.Context
 import android.content.SharedPreferences
