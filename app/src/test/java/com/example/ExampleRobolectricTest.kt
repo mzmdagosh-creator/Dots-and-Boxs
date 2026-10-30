@@ -17,7 +17,7 @@ class ExampleRobolectricTest {
     @Test
     fun `read string from context and verify credits strings`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        assertEquals("Dots & Boxes", context.getString(R.string.app_name))
+        assertEquals("Neon Grid Protocol", context.getString(R.string.app_name))
         assertEquals(
             "Design & Development: [Your Name/Handle]",
             context.getString(R.string.credits_design_dev)

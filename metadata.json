@@ -1,6 +1,6 @@
 {
-  "name": "Dots & Boxes",
-  "description": "Classic 5x9 Dots and Boxes strategy board game with custom player initials, streak tracking, and an interactive grid.",
+  "name": "Neon Grid Protocol",
+  "description": "Neon Grid Protocol — cyberpunk tactical grid strategy game with Campaign progression, Quick Match arena, timed modes, and Minimax AI.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

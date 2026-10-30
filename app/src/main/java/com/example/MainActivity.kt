@@ -65,6 +65,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -89,6 +90,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -169,13 +172,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 // ============================================================================
-// 1. NEON ARCADE THEME, COLORS & TYPOGRAPHY
+// 1. NEON GRID PROTOCOL — STRICTLY DARK MODE THEME (Color(0xFF121212))
+//    No light mode, no theme pickers.
 // ============================================================================
-
-enum class AppThemeMode {
-    CLASSIC_DARK,
-    HIGH_CONTRAST
-}
 
 val ObsidianBackground = Color(0xFF121212)
 val SlateSurface = Color(0xFF1A1E29)
@@ -184,11 +183,11 @@ val SlateBorder = Color(0xFF2E3A52)
 val DotWhite = Color(0xFFFFFFFF)
 val MutedText = Color(0xFF94A3B8)
 
-// Player 1: Neon Cyan (#00E5FF) & 40% Opacity Box Fill
+// Player 1: Neon Cyan (#00E5FF) & 40% Opacity Node Fill
 val Player1Cyan = Color(0xFF00E5FF)
 val Player1CyanFill = Color(0x6600E5FF)
 
-// Player 2 / CPU: Neon Magenta (#FF007F) & 40% Opacity Box Fill
+// AI CPU: Neon Magenta (#FF007F) & 40% Opacity Node Fill
 val Player2Coral = Color(0xFFFF007F)
 val Player2CoralFill = Color(0x66FF007F)
 
@@ -207,9 +206,8 @@ val JetBrainsMonoFontFamily = FontFamily.Monospace
 
 @Immutable
 data class GamePalette(
-    val themeMode: AppThemeMode = AppThemeMode.CLASSIC_DARK,
     val backgroundDeep: Color = ObsidianBackground,
-    val backgroundRadialTop: Color = Color(0xFF121212),
+    val backgroundRadialTop: Color = ObsidianBackground,
     val surface: Color = SlateSurface,
     val surfaceElevated: Color = SlateSurfaceElevated,
     val border: Color = SlateBorder,
@@ -228,8 +226,8 @@ data class GamePalette(
     val p4Fill: Color = Player4VioletFill
 )
 
-val ClassicDarkGamePalette = GamePalette(themeMode = AppThemeMode.CLASSIC_DARK)
-val LocalGamePalette = staticCompositionLocalOf { ClassicDarkGamePalette }
+val DarkProtocolPalette = GamePalette()
+val LocalGamePalette = staticCompositionLocalOf { DarkProtocolPalette }
 
 @Composable
 fun playerAccentColor(playerNumber: Int): Color {
@@ -255,7 +253,7 @@ fun playerFillColor(playerNumber: Int): Color {
     }
 }
 
-private val DarkGameColorScheme = darkColorScheme(
+private val DarkProtocolColorScheme = darkColorScheme(
     primary = Player1Cyan,
     onPrimary = ObsidianBackground,
     primaryContainer = SlateSurfaceElevated,
@@ -275,12 +273,12 @@ private val DarkGameColorScheme = darkColorScheme(
     error = Color(0xFFF87171)
 )
 
-private val ArcadeTypography = Typography(
+private val ProtocolTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = SpaceGroteskFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 36.sp,
-        lineHeight = 42.sp,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
         letterSpacing = (-0.5).sp
     ),
     headlineMedium = TextStyle(
@@ -331,14 +329,13 @@ private val ArcadeTypography = Typography(
 )
 
 @Composable
-fun MyApplicationTheme(
-    themeMode: AppThemeMode = AppThemeMode.CLASSIC_DARK,
+fun NeonGridProtocolTheme(
     content: @Composable () -> Unit
 ) {
-    CompositionLocalProvider(LocalGamePalette provides ClassicDarkGamePalette) {
+    CompositionLocalProvider(LocalGamePalette provides DarkProtocolPalette) {
         MaterialTheme(
-            colorScheme = DarkGameColorScheme,
-            typography = ArcadeTypography,
+            colorScheme = DarkProtocolColorScheme,
+            typography = ProtocolTypography,
             content = content
         )
     }
@@ -565,7 +562,7 @@ object SoundEngine {
 }
 
 // ============================================================================
-// 3. DOTS AND BOXES GAME ENGINE & AI OPPONENT (EASY, MEDIUM, HARD MINIMAX)
+// 3. GRID ARENA ENGINE & AI CPU (EASY RANDOM, MEDIUM GREEDY, HARD MINIMAX)
 // ============================================================================
 
 enum class EdgeOrientation {
@@ -605,23 +602,23 @@ enum class GridSize(
 }
 
 /**
- * Time Modes for Custom Arcade:
- * - RELAXED: Untimed
- * - BULLET: 3 seconds per turn
- * - BLITZ: 5 seconds per turn
- * - RAPID: 10 seconds per turn
+ * Time Limits for Quick Match Config:
+ * - RELAXED: Relaxed (Untimed)
+ * - BULLET: 3s
+ * - BLITZ: 5s
+ * - RAPID: 10s
  */
 enum class TimerMode(val durationSeconds: Int, val label: String) {
     RELAXED(0, "Relaxed"),
-    BULLET(3, "Bullet 3s"),
-    BLITZ(5, "Blitz 5s"),
-    RAPID(10, "Rapid 10s");
+    BULLET(3, "3s"),
+    BLITZ(5, "5s"),
+    RAPID(10, "10s");
 
     val isTimed: Boolean get() = durationSeconds > 0
 }
 
 /**
- * Tournament Mode sequential progression from Level 1 (3x3, Easy AI) to Level 6 (6x6, Hard AI),
+ * Campaign Mode sequential progression from Level 1 (3x3, Easy AI) to Level 6 (6x6, Hard AI),
  * saved via SharedPreferences.
  */
 enum class CampaignLevel(
@@ -809,8 +806,8 @@ object DotsAndBoxesEngine {
     }
 
     /**
-     * Claims an unclaimed horizontal or vertical edge and checks adjacent boxes.
-     * Capturing one or more boxes grants a mandatory extra turn (`grantedExtraTurn = true`).
+     * Draws a line between two dots. If the 4th line forming a closed square is drawn,
+     * the player captures the node, scores a point, and receives a mandatory extra turn.
      */
     fun makeMove(state: BoardState, edge: EdgeCoordinate): MoveOutcome? {
         if (state.isGameOver) return null
@@ -912,9 +909,9 @@ object DotsAndBoxesEngine {
     }
 
     /**
-     * AI Opponent:
+     * AI CPU Opponent:
      * - EASY: Random valid unclaimed line
-     * - MEDIUM: Greedy/Safe (completes 3-sided boxes; avoids creating 3rd wall)
+     * - MEDIUM: Greedy/Safe (completes 3-sided nodes; avoids drawing the 3rd side)
      * - HARD: Minimax with Alpha-Beta pruning
      */
     fun cpuTakeTurn(
@@ -1216,8 +1213,9 @@ object DotsAndBoxesEngine {
 // ============================================================================
 
 enum class ScreenDestination {
-    SETUP,
-    GAME,
+    SETUP,          // Screen 1: The Command Center (Main Menu)
+    QUICK_CONFIG,   // Screen 3: Quick Match Config
+    GAME,           // Screen 2: The Grid Arena (Gameplay)
     CREDITS
 }
 
@@ -1255,7 +1253,6 @@ data class MatchHistoryItem(
 data class GameUiState(
     val currentScreen: ScreenDestination = ScreenDestination.SETUP,
     val mainMenuSection: MainMenuSection = MainMenuSection.CAMPAIGN,
-    val themeMode: AppThemeMode = AppThemeMode.CLASSIC_DARK,
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
     val totalBoxesCaptured: Int = 0,
@@ -1498,6 +1495,30 @@ class GameViewModel : ViewModel() {
         _uiState.update { it.copy(currentScreen = ScreenDestination.SETUP) }
     }
 
+    fun openQuickMatchConfig() {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update {
+            it.copy(
+                currentScreen = ScreenDestination.QUICK_CONFIG,
+                mainMenuSection = MainMenuSection.QUICK_MATCH,
+                setupErrorResId = null
+            )
+        }
+    }
+
+    fun closeQuickMatchConfig() {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update {
+            it.copy(
+                currentScreen = ScreenDestination.SETUP,
+                mainMenuSection = MainMenuSection.CAMPAIGN,
+                setupErrorResId = null
+            )
+        }
+    }
+
     fun selectMainMenuSection(section: MainMenuSection) {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
@@ -1582,34 +1603,6 @@ class GameViewModel : ViewModel() {
             state.copy(
                 selectedCpuDifficulty = difficulty,
                 boardState = state.boardState.copy(cpuDifficulty = difficulty),
-                setupErrorResId = null
-            )
-        }
-    }
-
-    fun selectPlayerCount(count: Int) {
-        val coerced = count.coerceIn(1, 4)
-        if (coerced == 1) {
-            selectGameMode(GameMode.CPU)
-        } else {
-            _uiState.update { state ->
-                state.copy(
-                    selectedGameMode = GameMode.PVP,
-                    selectedPlayerCount = coerced,
-                    setupErrorResId = null
-                )
-            }
-        }
-    }
-
-    fun updatePlayerInput(playerIndex: Int, raw: String) {
-        if (playerIndex !in 0..3) return
-        val sanitized = raw.trim().uppercase().takeLast(1).ifBlank { "P" }
-        _uiState.update { state ->
-            val updatedList = state.playerInputs.toMutableList()
-            updatedList[playerIndex] = sanitized
-            state.copy(
-                playerInputs = updatedList,
                 setupErrorResId = null
             )
         }
@@ -2025,16 +2018,16 @@ class GameViewModel : ViewModel() {
 // 5. MAIN ACTIVITY & ROOT APP COMPOSABLE
 // ============================================================================
 
-private val ArcadeDarkBackground = Color(0xFF121212)
-private val ArcadeCardSurface = Color(0xFF1A1E29)
-private val ArcadeElevatedSurface = Color(0xFF222838)
-private val ArcadeCyan = Color(0xFF00E5FF)
-private val ArcadeMagenta = Color(0xFFFF007F)
-private val ArcadeLime = Color(0xFF00E676)
-private val ArcadeAmber = Color(0xFFFFEA00)
-private val ArcadeTextPrimary = Color(0xFFF8FAFC)
-private val ArcadeTextMuted = Color(0xFF94A3B8)
-private val ArcadeBorder = Color(0xFF2D3748)
+private val ProtocolDarkBackground = Color(0xFF121212)
+private val ProtocolCardSurface = Color(0xFF1A1E29)
+private val ProtocolElevatedSurface = Color(0xFF222838)
+private val ProtocolCyan = Color(0xFF00E5FF)
+private val ProtocolMagenta = Color(0xFFFF007F)
+private val ProtocolLime = Color(0xFF00E676)
+private val ProtocolAmber = Color(0xFFFFEA00)
+private val ProtocolTextPrimary = Color(0xFFF8FAFC)
+private val ProtocolTextMuted = Color(0xFF94A3B8)
+private val ProtocolBorder = Color(0xFF2D3748)
 
 private data class FloatingDotParticle(
     val xFraction: Float,
@@ -2052,13 +2045,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            DotsAndBoxesApp()
+            NeonGridProtocolApp()
         }
     }
 }
 
 @Composable
-fun DotsAndBoxesApp(
+fun NeonGridProtocolApp(
     viewModel: GameViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -2069,10 +2062,10 @@ fun DotsAndBoxesApp(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    MyApplicationTheme(themeMode = AppThemeMode.CLASSIC_DARK) {
+    NeonGridProtocolTheme {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = ArcadeDarkBackground,
+            containerColor = ProtocolDarkBackground,
             contentWindowInsets = WindowInsets.safeDrawing
         ) { innerPadding ->
             Crossfade(
@@ -2080,39 +2073,41 @@ fun DotsAndBoxesApp(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                label = "neonArcadeScreenTransition"
+                label = "neonGridProtocolScreenTransition"
             ) { destination ->
                 when (destination) {
+                    // Screen 1: The Command Center (Main Menu)
                     ScreenDestination.SETUP -> {
-                        NeonArcadeDashboard(
-                            totalBoxesCaptured = uiState.totalBoxesCaptured,
+                        CommandCenterScreen(
+                            nodesCaptured = uiState.totalBoxesCaptured,
                             unlockedCampaignLevel = uiState.unlockedCampaignLevel,
                             selectedCampaignLevel = uiState.selectedCampaignLevel,
-                            mainMenuSection = uiState.mainMenuSection,
+                            sessionStats = uiState.sessionStats,
+                            matchHistory = uiState.matchHistory,
+                            onResumeCampaign = viewModel::resumeTournament,
+                            onOpenQuickMatch = viewModel::openQuickMatchConfig,
+                            onSelectCampaignLevel = viewModel::selectCampaignLevel,
+                            onStartCampaignLevel = viewModel::startCampaignLevel
+                        )
+                    }
+
+                    // Screen 3: Quick Match Config
+                    ScreenDestination.QUICK_CONFIG -> {
+                        QuickMatchConfigScreen(
                             selectedGridSize = uiState.selectedGridSize,
                             selectedCpuDifficulty = uiState.selectedCpuDifficulty,
                             selectedTimerMode = uiState.selectedTimerMode,
-                            sessionStats = uiState.sessionStats,
-                            matchHistory = uiState.matchHistory,
-                            onResumeTournament = viewModel::resumeTournament,
-                            onSelectMainMenuSection = viewModel::selectMainMenuSection,
-                            onSelectCampaignLevel = viewModel::selectCampaignLevel,
-                            onStartCampaignLevel = viewModel::startCampaignLevel,
                             onSelectGridSize = viewModel::selectGridSize,
                             onSelectCpuDifficulty = viewModel::selectCpuDifficulty,
                             onSelectTimerMode = viewModel::selectTimerMode,
-                            onStartCustomGame = { viewModel.startGame() }
+                            onStartMatch = { viewModel.startGame() },
+                            onBackToCommandCenter = viewModel::closeQuickMatchConfig
                         )
                     }
 
-                    ScreenDestination.CREDITS -> {
-                        CreditsScreen(
-                            onBack = viewModel::closeCreditsScreen
-                        )
-                    }
-
+                    // Screen 2: The Grid Arena (Gameplay)
                     ScreenDestination.GAME -> {
-                        GameScreen(
+                        GridArenaScreen(
                             soundEnabled = uiState.soundEnabled,
                             hapticsEnabled = uiState.hapticsEnabled,
                             activeCampaignLevel = uiState.activeCampaignLevel,
@@ -2124,8 +2119,6 @@ fun DotsAndBoxesApp(
                             blitzRemainingFraction = uiState.blitzRemainingFraction,
                             lastTurnForfeitedByTimeout = uiState.lastTurnForfeitedByTimeout,
                             boardState = uiState.boardState,
-                            sessionStats = uiState.sessionStats,
-                            matchHistory = uiState.matchHistory,
                             hoveredEdge = uiState.hoveredEdge,
                             boardZoom = uiState.boardZoom,
                             lastHapticEvent = uiState.lastHapticEvent,
@@ -2142,7 +2135,13 @@ fun DotsAndBoxesApp(
                             onAdjustZoom = viewModel::adjustZoom,
                             onSetZoom = viewModel::setZoom,
                             onRestartMatch = viewModel::restartMatch,
-                            onReturnToSetup = viewModel::returnToSetup
+                            onReturnToCommandCenter = viewModel::returnToSetup
+                        )
+                    }
+
+                    ScreenDestination.CREDITS -> {
+                        CreditsScreen(
+                            onBack = viewModel::closeCreditsScreen
                         )
                     }
                 }
@@ -2152,33 +2151,28 @@ fun DotsAndBoxesApp(
 }
 
 // ============================================================================
-// 6. NEON ARCADE DASHBOARD (TOURNAMENT & CUSTOM ARCADE SELECTORS)
-//    Strictly NO text input fields for player names or letters.
+// 6. SCREEN 1: THE COMMAND CENTER (MAIN MENU)
+//    - Glowing Cyan button: 'Resume Campaign'
+//    - Glowing Magenta button: 'Quick Match'
+//    - Stats row showing 'Nodes Captured' (Integer)
+//    - Strictly NO text fields, NO user letters or names
 // ============================================================================
 
 @Composable
-fun NeonArcadeDashboard(
-    totalBoxesCaptured: Int = 0,
+fun CommandCenterScreen(
+    nodesCaptured: Int = 0,
     unlockedCampaignLevel: Int = 1,
     selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
-    mainMenuSection: MainMenuSection = MainMenuSection.CAMPAIGN,
-    selectedGridSize: GridSize = GridSize.SIZE_4X4,
-    selectedCpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
-    selectedTimerMode: TimerMode = TimerMode.RELAXED,
     sessionStats: Map<Int, PlayerSessionStats> = emptyMap(),
     matchHistory: List<MatchHistoryItem> = emptyList(),
-    onResumeTournament: () -> Unit = {},
-    onSelectMainMenuSection: (MainMenuSection) -> Unit = {},
+    onResumeCampaign: () -> Unit = {},
+    onOpenQuickMatch: () -> Unit = {},
     onSelectCampaignLevel: (CampaignLevel) -> Unit = {},
     onStartCampaignLevel: (CampaignLevel) -> Unit = {},
-    onSelectGridSize: (GridSize) -> Unit = {},
-    onSelectCpuDifficulty: (CpuDifficulty) -> Unit = {},
-    onSelectTimerMode: (TimerMode) -> Unit = {},
-    onStartCustomGame: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    val infiniteTransition = rememberInfiniteTransition(label = "neonArcadeTransition")
+    val infiniteTransition = rememberInfiniteTransition(label = "commandCenterTransition")
     val headerGlow by infiniteTransition.animateFloat(
         initialValue = 0.65f,
         targetValue = 1.0f,
@@ -2221,7 +2215,7 @@ fun NeonArcadeDashboard(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF121212))
-            .testTag("main_menu_dashboard"),
+            .testTag("command_center_screen"),
         contentAlignment = Alignment.TopCenter
     ) {
         Canvas(
@@ -2241,7 +2235,7 @@ fun NeonArcadeDashboard(
 
                 val centerX = ((dot.xFraction * width + offsetX) % width + width) % width
                 val centerY = ((dot.yFraction * height + offsetY) % height + height) % height
-                val dotColor = if (dot.isCyan) ArcadeCyan else ArcadeMagenta
+                val dotColor = if (dot.isCyan) ProtocolCyan else ProtocolMagenta
                 val radiusPx = dot.radiusDp.dp.toPx()
 
                 drawCircle(
@@ -2266,51 +2260,27 @@ fun NeonArcadeDashboard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            NeonArcadeHeader(glowAlpha = headerGlow)
+            CommandCenterHeader(glowAlpha = headerGlow)
 
-            NeonArcadeStatsRow(
-                totalBoxesCaptured = totalBoxesCaptured,
+            CommandCenterStatsRow(
+                nodesCaptured = nodesCaptured,
                 unlockedCampaignLevel = unlockedCampaignLevel,
                 totalCampaignLevels = CampaignLevel.entries.size
             )
 
-            NeonArcadeMainActions(
-                mainMenuSection = mainMenuSection,
+            CommandCenterActionButtons(
                 unlockedCampaignLevel = unlockedCampaignLevel,
                 glowAlpha = headerGlow,
-                onResumeTournamentClick = {
-                    onSelectMainMenuSection(MainMenuSection.CAMPAIGN)
-                    onResumeTournament()
-                },
-                onCustomArcadeClick = {
-                    if (mainMenuSection != MainMenuSection.QUICK_MATCH) {
-                        onSelectMainMenuSection(MainMenuSection.QUICK_MATCH)
-                    } else {
-                        onStartCustomGame()
-                    }
-                }
+                onResumeCampaignClick = onResumeCampaign,
+                onQuickMatchClick = onOpenQuickMatch
             )
 
-            AnimatedVisibility(visible = mainMenuSection == MainMenuSection.CAMPAIGN) {
-                TournamentList(
-                    unlockedCampaignLevel = unlockedCampaignLevel,
-                    selectedCampaignLevel = selectedCampaignLevel,
-                    onSelectCampaignLevel = onSelectCampaignLevel,
-                    onStartCampaignLevel = onStartCampaignLevel
-                )
-            }
-
-            AnimatedVisibility(visible = mainMenuSection == MainMenuSection.QUICK_MATCH) {
-                CustomArcadeConfigPanel(
-                    selectedGridSize = selectedGridSize,
-                    selectedCpuDifficulty = selectedCpuDifficulty,
-                    selectedTimerMode = selectedTimerMode,
-                    onSelectGridSize = onSelectGridSize,
-                    onSelectCpuDifficulty = onSelectCpuDifficulty,
-                    onSelectTimerMode = onSelectTimerMode,
-                    onStartGame = onStartCustomGame
-                )
-            }
+            CampaignStageSelectorCard(
+                unlockedCampaignLevel = unlockedCampaignLevel,
+                selectedCampaignLevel = selectedCampaignLevel,
+                onSelectCampaignLevel = onSelectCampaignLevel,
+                onStartCampaignLevel = onStartCampaignLevel
+            )
 
             DashboardSessionHistoryCard(
                 sessionStats = sessionStats,
@@ -2321,7 +2291,7 @@ fun NeonArcadeDashboard(
 }
 
 @Composable
-private fun NeonArcadeHeader(
+private fun CommandCenterHeader(
     glowAlpha: Float,
     modifier: Modifier = Modifier
 ) {
@@ -2329,13 +2299,13 @@ private fun NeonArcadeHeader(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
-            .background(ArcadeCardSurface)
+            .background(ProtocolCardSurface)
             .border(
                 width = 1.5.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        ArcadeCyan.copy(alpha = glowAlpha),
-                        ArcadeMagenta.copy(alpha = glowAlpha)
+                        ProtocolCyan.copy(alpha = glowAlpha),
+                        ProtocolMagenta.copy(alpha = glowAlpha)
                     )
                 ),
                 shape = RoundedCornerShape(22.dp)
@@ -2345,44 +2315,44 @@ private fun NeonArcadeHeader(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            text = "DOTS & BOXES",
+            text = "NEON GRID PROTOCOL",
             style = MaterialTheme.typography.displayLarge.copy(
                 fontFamily = JetBrainsMonoFontFamily,
                 fontWeight = FontWeight.Black,
-                fontSize = 32.sp,
-                letterSpacing = 3.sp,
+                fontSize = 27.sp,
+                letterSpacing = 2.4.sp,
                 shadow = Shadow(
-                    color = ArcadeCyan.copy(alpha = glowAlpha),
+                    color = ProtocolCyan.copy(alpha = glowAlpha),
                     offset = Offset.Zero,
                     blurRadius = 28f
                 )
             ),
-            color = ArcadeTextPrimary,
+            color = ProtocolTextPrimary,
             textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("neon_arcade_title")
+            modifier = Modifier.testTag("neon_protocol_title")
         )
 
         Text(
-            text = "NEON ARCADE DASHBOARD",
+            text = "THE COMMAND CENTER",
             style = MaterialTheme.typography.labelSmall.copy(
                 fontFamily = JetBrainsMonoFontFamily,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.4.sp,
+                letterSpacing = 1.6.sp,
                 shadow = Shadow(
-                    color = ArcadeMagenta.copy(alpha = 0.75f),
+                    color = ProtocolMagenta.copy(alpha = 0.75f),
                     offset = Offset.Zero,
                     blurRadius = 14f
                 )
             ),
-            color = ArcadeMagenta,
+            color = ProtocolMagenta,
             textAlign = TextAlign.Center
         )
     }
 }
 
 @Composable
-private fun NeonArcadeStatsRow(
-    totalBoxesCaptured: Int,
+private fun CommandCenterStatsRow(
+    nodesCaptured: Int,
     unlockedCampaignLevel: Int,
     totalCampaignLevels: Int,
     modifier: Modifier = Modifier
@@ -2393,19 +2363,20 @@ private fun NeonArcadeStatsRow(
             .testTag("player_stats_header_row"),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Nodes Captured (Integer)
         Column(
             modifier = Modifier
                 .weight(1f)
                 .shadow(
                     elevation = 10.dp,
                     shape = RoundedCornerShape(16.dp),
-                    spotColor = ArcadeCyan.copy(alpha = 0.45f)
+                    spotColor = ProtocolCyan.copy(alpha = 0.45f)
                 )
                 .clip(RoundedCornerShape(16.dp))
-                .background(ArcadeCardSurface)
-                .border(1.5.dp, ArcadeCyan, RoundedCornerShape(16.dp))
+                .background(ProtocolCardSurface)
+                .border(1.5.dp, ProtocolCyan, RoundedCornerShape(16.dp))
                 .padding(horizontal = 12.dp, vertical = 12.dp)
-                .testTag("total_boxes_captured_stat"),
+                .testTag("nodes_captured_stat"),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -2416,49 +2387,50 @@ private fun NeonArcadeStatsRow(
                 Icon(
                     imageVector = Icons.Filled.GridView,
                     contentDescription = null,
-                    tint = ArcadeCyan,
+                    tint = ProtocolCyan,
                     modifier = Modifier.size(15.dp)
                 )
                 Text(
-                    text = "Total Boxes Captured",
+                    text = "Nodes Captured",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     ),
-                    color = ArcadeTextPrimary,
+                    color = ProtocolTextPrimary,
                     textAlign = TextAlign.Center
                 )
             }
             Text(
-                text = totalBoxesCaptured.toString(),
+                text = nodesCaptured.toString(),
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Black,
                     shadow = Shadow(
-                        color = ArcadeCyan,
+                        color = ProtocolCyan,
                         offset = Offset.Zero,
                         blurRadius = 14f
                     )
                 ),
-                color = ArcadeCyan,
-                modifier = Modifier.testTag("total_boxes_captured_value")
+                color = ProtocolCyan,
+                modifier = Modifier.testTag("nodes_captured_value")
             )
         }
 
+        // Campaign Level Progress
         Column(
             modifier = Modifier
                 .weight(1f)
                 .shadow(
                     elevation = 10.dp,
                     shape = RoundedCornerShape(16.dp),
-                    spotColor = ArcadeMagenta.copy(alpha = 0.45f)
+                    spotColor = ProtocolMagenta.copy(alpha = 0.45f)
                 )
                 .clip(RoundedCornerShape(16.dp))
-                .background(ArcadeCardSurface)
-                .border(1.5.dp, ArcadeMagenta, RoundedCornerShape(16.dp))
+                .background(ProtocolCardSurface)
+                .border(1.5.dp, ProtocolMagenta, RoundedCornerShape(16.dp))
                 .padding(horizontal = 12.dp, vertical = 12.dp)
-                .testTag("tournament_level_reached_stat"),
+                .testTag("campaign_level_reached_stat"),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -2469,17 +2441,17 @@ private fun NeonArcadeStatsRow(
                 Icon(
                     imageVector = Icons.Filled.EmojiEvents,
                     contentDescription = null,
-                    tint = ArcadeMagenta,
+                    tint = ProtocolMagenta,
                     modifier = Modifier.size(15.dp)
                 )
                 Text(
-                    text = "Tournament Level",
+                    text = "Campaign Stage",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     ),
-                    color = ArcadeTextPrimary,
+                    color = ProtocolTextPrimary,
                     textAlign = TextAlign.Center
                 )
             }
@@ -2489,41 +2461,39 @@ private fun NeonArcadeStatsRow(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Black,
                     shadow = Shadow(
-                        color = ArcadeMagenta,
+                        color = ProtocolMagenta,
                         offset = Offset.Zero,
                         blurRadius = 14f
                     )
                 ),
-                color = ArcadeMagenta,
-                modifier = Modifier.testTag("tournament_level_reached_value")
+                color = ProtocolMagenta,
+                modifier = Modifier.testTag("campaign_level_reached_value")
             )
         }
     }
 }
 
 @Composable
-private fun NeonArcadeMainActions(
-    mainMenuSection: MainMenuSection,
+private fun CommandCenterActionButtons(
     unlockedCampaignLevel: Int,
     glowAlpha: Float,
-    onResumeTournamentClick: () -> Unit,
-    onCustomArcadeClick: () -> Unit,
+    onResumeCampaignClick: () -> Unit,
+    onQuickMatchClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currentLevel = CampaignLevel.fromNumber(unlockedCampaignLevel)
-    val isCampaignSelected = mainMenuSection == MainMenuSection.CAMPAIGN
 
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Glowing Cyan Button: "Resume Tournament"
+        // Glowing Cyan Button: 'Resume Campaign'
         Button(
-            onClick = onResumeTournamentClick,
+            onClick = onResumeCampaignClick,
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (isCampaignSelected) ArcadeCyan else ArcadeCardSurface,
-                contentColor = if (isCampaignSelected) Color.Black else ArcadeCyan
+                containerColor = ProtocolCyan,
+                contentColor = Color.Black
             ),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
             modifier = Modifier
@@ -2532,14 +2502,14 @@ private fun NeonArcadeMainActions(
                 .shadow(
                     elevation = 16.dp,
                     shape = RoundedCornerShape(18.dp),
-                    spotColor = ArcadeCyan.copy(alpha = glowAlpha)
+                    spotColor = ProtocolCyan.copy(alpha = glowAlpha)
                 )
                 .border(
                     width = 2.dp,
-                    color = ArcadeCyan,
+                    color = ProtocolCyan,
                     shape = RoundedCornerShape(18.dp)
                 )
-                .testTag("menu_campaign_button")
+                .testTag("resume_campaign_button")
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -2555,7 +2525,7 @@ private fun NeonArcadeMainActions(
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = "Resume Tournament",
+                        text = "Resume Campaign",
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Black,
@@ -2571,19 +2541,19 @@ private fun NeonArcadeMainActions(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 10.sp
                     ),
-                    color = if (isCampaignSelected) Color.Black.copy(alpha = 0.8f) else ArcadeTextMuted,
+                    color = Color.Black.copy(alpha = 0.8f),
                     textAlign = TextAlign.Center
                 )
             }
         }
 
-        // Glowing Magenta Button: "Custom Arcade"
+        // Glowing Magenta Button: 'Quick Match'
         Button(
-            onClick = onCustomArcadeClick,
+            onClick = onQuickMatchClick,
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (!isCampaignSelected) ArcadeMagenta else ArcadeCardSurface,
-                contentColor = if (!isCampaignSelected) Color.White else ArcadeMagenta
+                containerColor = ProtocolMagenta,
+                contentColor = Color.White
             ),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
             modifier = Modifier
@@ -2592,14 +2562,14 @@ private fun NeonArcadeMainActions(
                 .shadow(
                     elevation = 16.dp,
                     shape = RoundedCornerShape(18.dp),
-                    spotColor = ArcadeMagenta.copy(alpha = glowAlpha)
+                    spotColor = ProtocolMagenta.copy(alpha = glowAlpha)
                 )
                 .border(
                     width = 2.dp,
-                    color = ArcadeMagenta,
+                    color = ProtocolMagenta,
                     shape = RoundedCornerShape(18.dp)
                 )
-                .testTag("menu_quick_match_button")
+                .testTag("quick_match_button")
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -2615,7 +2585,7 @@ private fun NeonArcadeMainActions(
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = "Custom Arcade",
+                        text = "Quick Match",
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Black,
@@ -2626,12 +2596,12 @@ private fun NeonArcadeMainActions(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "3×3–6×6 • Timed Modes",
+                    text = "Configure Arena & Timers",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 10.sp
                     ),
-                    color = if (!isCampaignSelected) Color.White.copy(alpha = 0.9f) else ArcadeTextMuted,
+                    color = Color.White.copy(alpha = 0.9f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -2640,7 +2610,7 @@ private fun NeonArcadeMainActions(
 }
 
 @Composable
-fun TournamentList(
+fun CampaignStageSelectorCard(
     unlockedCampaignLevel: Int = 1,
     selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
     onSelectCampaignLevel: (CampaignLevel) -> Unit = {},
@@ -2650,10 +2620,10 @@ fun TournamentList(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.5.dp, ArcadeCyan.copy(alpha = 0.6f), RoundedCornerShape(22.dp))
-            .testTag("tournament_campaign_section"),
+            .border(1.5.dp, ProtocolCyan.copy(alpha = 0.6f), RoundedCornerShape(22.dp))
+            .testTag("campaign_protocol_section"),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = ArcadeCardSurface)
+        colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -2665,12 +2635,12 @@ fun TournamentList(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "TOURNAMENT CAMPAIGN (6 STAGES)",
+                    text = "CAMPAIGN PROTOCOL (6 STAGES)",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontWeight = FontWeight.Bold
                     ),
-                    color = ArcadeCyan
+                    color = ProtocolCyan
                 )
                 Text(
                     text = "Unlocked: $unlockedCampaignLevel / ${CampaignLevel.entries.size}",
@@ -2678,7 +2648,7 @@ fun TournamentList(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontWeight = FontWeight.Bold
                     ),
-                    color = ArcadeAmber,
+                    color = ProtocolAmber,
                     modifier = Modifier.testTag("campaign_unlocked_progress_text")
                 )
             }
@@ -2692,9 +2662,9 @@ fun TournamentList(
                     val isCleared = level.levelNumber < unlockedCampaignLevel
                     val isSelected = selectedCampaignLevel == level && isUnlocked
                     val diffColor = when (level.difficulty) {
-                        CpuDifficulty.EASY -> ArcadeLime
-                        CpuDifficulty.MEDIUM -> ArcadeAmber
-                        CpuDifficulty.HARD -> ArcadeMagenta
+                        CpuDifficulty.EASY -> ProtocolLime
+                        CpuDifficulty.MEDIUM -> ProtocolAmber
+                        CpuDifficulty.HARD -> ProtocolMagenta
                     }
 
                     Row(
@@ -2703,14 +2673,14 @@ fun TournamentList(
                             .alpha(if (isUnlocked) 1f else 0.45f)
                             .clip(RoundedCornerShape(14.dp))
                             .background(
-                                if (isSelected) ArcadeCyan.copy(alpha = 0.14f) else ArcadeElevatedSurface
+                                if (isSelected) ProtocolCyan.copy(alpha = 0.14f) else ProtocolElevatedSurface
                             )
                             .border(
                                 width = if (isSelected) 2.dp else 1.dp,
                                 color = when {
-                                    isSelected -> ArcadeCyan
-                                    isCleared -> ArcadeLime.copy(alpha = 0.7f)
-                                    else -> ArcadeBorder
+                                    isSelected -> ProtocolCyan
+                                    isCleared -> ProtocolLime.copy(alpha = 0.7f)
+                                    else -> ProtocolBorder
                                 },
                                 shape = RoundedCornerShape(14.dp)
                             )
@@ -2732,11 +2702,11 @@ fun TournamentList(
                                     .size(36.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        if (isUnlocked) ArcadeDarkBackground else ArcadeBorder.copy(alpha = 0.4f)
+                                        if (isUnlocked) ProtocolDarkBackground else ProtocolBorder.copy(alpha = 0.4f)
                                     )
                                     .border(
                                         1.5.dp,
-                                        if (isUnlocked) ArcadeCyan else ArcadeBorder,
+                                        if (isUnlocked) ProtocolCyan else ProtocolBorder,
                                         CircleShape
                                     ),
                                 contentAlignment = Alignment.Center
@@ -2745,14 +2715,14 @@ fun TournamentList(
                                     Icon(
                                         imageVector = Icons.Filled.Lock,
                                         contentDescription = "LOCKED",
-                                        tint = ArcadeTextMuted,
+                                        tint = ProtocolTextMuted,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 } else if (isCleared) {
                                     Icon(
                                         imageVector = Icons.Filled.CheckCircle,
                                         contentDescription = "Cleared",
-                                        tint = ArcadeLime,
+                                        tint = ProtocolLime,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 } else {
@@ -2762,7 +2732,7 @@ fun TournamentList(
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontWeight = FontWeight.Bold
                                         ),
-                                        color = ArcadeCyan
+                                        color = ProtocolCyan
                                     )
                                 }
                             }
@@ -2773,14 +2743,14 @@ fun TournamentList(
                                     style = MaterialTheme.typography.labelLarge.copy(
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = if (isUnlocked) ArcadeTextPrimary else ArcadeTextMuted
+                                    color = if (isUnlocked) ProtocolTextPrimary else ProtocolTextMuted
                                 )
                                 Text(
                                     text = "${level.gridSize.label} Grid • ${level.difficulty.label} AI",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = JetBrainsMonoFontFamily
                                     ),
-                                    color = if (isUnlocked) diffColor else ArcadeTextMuted
+                                    color = if (isUnlocked) diffColor else ProtocolTextMuted
                                 )
                             }
                         }
@@ -2790,7 +2760,7 @@ fun TournamentList(
                                 onClick = { onStartCampaignLevel(level) },
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = ArcadeCyan,
+                                    containerColor = ProtocolCyan,
                                     contentColor = Color.Black
                                 ),
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
@@ -2799,7 +2769,7 @@ fun TournamentList(
                                     .testTag("campaign_level_${level.levelNumber}")
                             ) {
                                 Text(
-                                    text = "Play",
+                                    text = "Deploy",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontWeight = FontWeight.Bold
@@ -2810,8 +2780,8 @@ fun TournamentList(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(ArcadeDarkBackground)
-                                    .border(1.dp, ArcadeBorder, RoundedCornerShape(8.dp))
+                                    .background(ProtocolDarkBackground)
+                                    .border(1.dp, ProtocolBorder, RoundedCornerShape(8.dp))
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                                     .testTag("campaign_level_${level.levelNumber}"),
                                 contentAlignment = Alignment.Center
@@ -2822,299 +2792,452 @@ fun TournamentList(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = ArcadeTextMuted
+                                    color = ProtocolTextMuted
                                 )
                             }
                         }
                     }
                 }
             }
-
-            val activeTargetLevel = if (selectedCampaignLevel.levelNumber <= unlockedCampaignLevel) {
-                selectedCampaignLevel
-            } else {
-                CampaignLevel.fromNumber(unlockedCampaignLevel)
-            }
-
-            Button(
-                onClick = { onStartCampaignLevel(activeTargetLevel) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .testTag("start_campaign_button"),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ArcadeCyan,
-                    contentColor = Color.Black
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Start Level ${activeTargetLevel.levelNumber}",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-            }
         }
     }
 }
 
-/**
- * Custom Arcade Panel:
- * - Grid Size (3x3 to 6x6)
- * - CPU Difficulty (Easy, Medium, Hard)
- * - Time Mode (Relaxed, Bullet 3s, Blitz 5s, Rapid 10s)
- * - No text input fields for player names or letters.
- */
+// ============================================================================
+// 7. SCREEN 3: QUICK MATCH CONFIG
+//    - Simple dropdowns AND toggles for Grid Size (3x3 to 6x6),
+//      CPU Difficulty (Easy, Medium, Hard), and Time Limit (Relaxed, 3s, 5s, 10s).
+//    - Strictly NO text inputs.
+// ============================================================================
+
 @Composable
-fun CustomArcadeConfigPanel(
+fun QuickMatchConfigScreen(
     selectedGridSize: GridSize,
     selectedCpuDifficulty: CpuDifficulty,
     selectedTimerMode: TimerMode,
     onSelectGridSize: (GridSize) -> Unit,
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onSelectTimerMode: (TimerMode) -> Unit,
-    onStartGame: () -> Unit
+    onStartMatch: () -> Unit,
+    onBackToCommandCenter: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.5.dp, ArcadeMagenta.copy(alpha = 0.65f), RoundedCornerShape(22.dp))
-            .testTag("quick_match_section"),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = ArcadeCardSurface)
+    val scrollState = rememberScrollState()
+    var gridDropdownExpanded by remember { mutableStateOf(false) }
+    var diffDropdownExpanded by remember { mutableStateOf(false) }
+    var timerDropdownExpanded by remember { mutableStateOf(false) }
+
+    BackHandler {
+        onBackToCommandCenter()
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF121212))
+            .testTag("quick_match_config_screen"),
+        contentAlignment = Alignment.TopCenter
     ) {
+        DriftingNeonDotsBackground()
+
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 560.dp)
+                .verticalScroll(scrollState)
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "CUSTOM ARCADE MODE",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = ArcadeMagenta
-            )
-
-            // 1. Grid Size Selector (3x3, 4x4, 5x5, 6x6)
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Grid Size (3×3 to 6×6)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ArcadeTextMuted
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Top bar with Back to Command Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                OutlinedButton(
+                    onClick = onBackToCommandCenter,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolTextPrimary),
+                    modifier = Modifier
+                        .height(48.dp)
+                        .testTag("back_to_command_center_button")
                 ) {
-                    GridSize.entries.forEach { sizeOption ->
-                        val isSelected = selectedGridSize == sizeOption
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) ArcadeCyan else ArcadeElevatedSurface)
-                                .border(
-                                    width = if (isSelected) 2.dp else 1.dp,
-                                    color = if (isSelected) ArcadeCyan else ArcadeBorder,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .clickable { onSelectGridSize(sizeOption) }
-                                .testTag("setup_grid_${sizeOption.boxRows}x${sizeOption.boxCols}_button"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = sizeOption.label,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (isSelected) Color.Black else ArcadeTextPrimary
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Command Center",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Command Center",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
+
+                Text(
+                    text = "QUICK MATCH CONFIG",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Black,
+                        color = ProtocolMagenta
+                    )
+                )
             }
 
-            // 2. CPU Difficulty Selector (Easy, Medium, Hard)
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "CPU Difficulty",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ArcadeTextMuted
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, ProtocolMagenta.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                    .testTag("quick_match_section"),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
-                    CpuDifficulty.entries.forEach { diff ->
-                        val isSelected = selectedCpuDifficulty == diff
-                        val diffAccent = when (diff) {
-                            CpuDifficulty.EASY -> ArcadeLime
-                            CpuDifficulty.MEDIUM -> ArcadeAmber
-                            CpuDifficulty.HARD -> ArcadeMagenta
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) diffAccent else ArcadeElevatedSurface)
-                                .border(
-                                    width = if (isSelected) 2.dp else 1.dp,
-                                    color = if (isSelected) diffAccent else ArcadeBorder,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .clickable { onSelectCpuDifficulty(diff) }
-                                .testTag("cpu_diff_${diff.name.lowercase()}_button"),
-                            contentAlignment = Alignment.Center
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "PROTOCOL PARAMETERS",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = ProtocolTextPrimary
+                        )
+                        Text(
+                            text = "Select Grid Size, CPU Difficulty, and Time Limit before entering The Grid Arena.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ProtocolTextMuted
+                        )
+                    }
+
+                    // 1. GRID SIZE DROPDOWN + TOGGLE CHIPS (3x3, 4x4, 5x5, 6x6)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = diff.label,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (isSelected) Color.Black else ArcadeTextPrimary
+                                text = "GRID SIZE",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = ProtocolCyan
                             )
-                        }
-                    }
-                }
-            }
 
-            // 3. Time Mode Selector (Relaxed, Bullet 3s, Blitz 5s, Rapid 10s)
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Time Mode",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ArcadeTextMuted
-                )
-                val timerModes = TimerMode.entries
-                for (rowModes in timerModes.chunked(2)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        for (mode in rowModes) {
-                            val isSelected = selectedTimerMode == mode
-                            val modeAccent = if (mode == TimerMode.RELAXED) ArcadeCyan else ArcadeMagenta
-                            val modeIcon = if (mode == TimerMode.RELAXED) Icons.Filled.TimerOff else Icons.Filled.Timer
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (isSelected) modeAccent else ArcadeElevatedSurface)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = if (isSelected) modeAccent else ArcadeBorder,
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                                    .clickable { onSelectTimerMode(mode) }
-                                    .testTag("timer_${mode.name.lowercase()}_button"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Box {
+                                OutlinedButton(
+                                    onClick = { gridDropdownExpanded = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolCyan),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .testTag("grid_size_dropdown_button")
                                 ) {
-                                    Icon(
-                                        imageVector = modeIcon,
-                                        contentDescription = null,
-                                        tint = if (isSelected) Color.Black else modeAccent,
-                                        modifier = Modifier.size(16.dp)
-                                    )
                                     Text(
-                                        text = mode.label,
+                                        text = "${selectedGridSize.label} (${selectedGridSize.totalBoxes} Nodes)",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.ArrowDropDown,
+                                        contentDescription = "Select Grid Size"
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = gridDropdownExpanded,
+                                    onDismissRequest = { gridDropdownExpanded = false },
+                                    modifier = Modifier.background(ProtocolElevatedSurface)
+                                ) {
+                                    GridSize.entries.forEach { sizeOption ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "${sizeOption.label} Grid (${sizeOption.totalBoxes} Nodes)",
+                                                    color = ProtocolTextPrimary,
+                                                    fontFamily = JetBrainsMonoFontFamily
+                                                )
+                                            },
+                                            onClick = {
+                                                onSelectGridSize(sizeOption)
+                                                gridDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GridSize.entries.forEach { sizeOption ->
+                                val isSelected = selectedGridSize == sizeOption
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) ProtocolCyan else ProtocolElevatedSurface)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) ProtocolCyan else ProtocolBorder,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable { onSelectGridSize(sizeOption) }
+                                        .testTag("setup_grid_${sizeOption.boxRows}x${sizeOption.boxCols}_button"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = sizeOption.label,
                                         style = MaterialTheme.typography.labelLarge,
-                                        color = if (isSelected) Color.Black else ArcadeTextPrimary
+                                        color = if (isSelected) Color.Black else ProtocolTextPrimary
                                     )
                                 }
                             }
                         }
                     }
-                }
-            }
 
-            // Player vs CPU Color Legend (Neon Cyan vs Neon Magenta)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(ArcadeElevatedSurface)
-                    .border(1.dp, ArcadeBorder, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(ArcadeCyan)
-                    )
-                    Text(
-                        text = "PLAYER (NEON CYAN)",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = ArcadeCyan
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(ArcadeMagenta)
-                    )
-                    Text(
-                        text = "CPU (NEON MAGENTA)",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = ArcadeMagenta
-                    )
-                }
-            }
+                    // 2. CPU DIFFICULTY DROPDOWN + TOGGLE CHIPS (Easy, Medium, Hard)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "CPU DIFFICULTY",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = ProtocolAmber
+                            )
 
-            Button(
-                onClick = onStartGame,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .testTag("start_game_button"),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ArcadeMagenta,
-                    contentColor = Color.White
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Start Custom Arcade",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontWeight = FontWeight.Bold
-                    )
-                )
+                            Box {
+                                OutlinedButton(
+                                    onClick = { diffDropdownExpanded = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolAmber),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .testTag("cpu_difficulty_dropdown_button")
+                                ) {
+                                    Text(
+                                        text = selectedCpuDifficulty.label,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.ArrowDropDown,
+                                        contentDescription = "Select CPU Difficulty"
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = diffDropdownExpanded,
+                                    onDismissRequest = { diffDropdownExpanded = false },
+                                    modifier = Modifier.background(ProtocolElevatedSurface)
+                                ) {
+                                    CpuDifficulty.entries.forEach { diff ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = when (diff) {
+                                                        CpuDifficulty.EASY -> "Easy (Random AI)"
+                                                        CpuDifficulty.MEDIUM -> "Medium (Greedy AI)"
+                                                        CpuDifficulty.HARD -> "Hard (Minimax AI)"
+                                                    },
+                                                    color = ProtocolTextPrimary,
+                                                    fontFamily = JetBrainsMonoFontFamily
+                                                )
+                                            },
+                                            onClick = {
+                                                onSelectCpuDifficulty(diff)
+                                                diffDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CpuDifficulty.entries.forEach { diff ->
+                                val isSelected = selectedCpuDifficulty == diff
+                                val diffAccent = when (diff) {
+                                    CpuDifficulty.EASY -> ProtocolLime
+                                    CpuDifficulty.MEDIUM -> ProtocolAmber
+                                    CpuDifficulty.HARD -> ProtocolMagenta
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) diffAccent else ProtocolElevatedSurface)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) diffAccent else ProtocolBorder,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable { onSelectCpuDifficulty(diff) }
+                                        .testTag("cpu_diff_${diff.name.lowercase()}_button"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = diff.label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (isSelected) Color.Black else ProtocolTextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. TIME LIMIT DROPDOWN + TOGGLE CHIPS (Relaxed, 3s, 5s, 10s)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "TIME LIMIT",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = ProtocolMagenta
+                            )
+
+                            Box {
+                                OutlinedButton(
+                                    onClick = { timerDropdownExpanded = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolMagenta),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .testTag("time_limit_dropdown_button")
+                                ) {
+                                    Text(
+                                        text = selectedTimerMode.label,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.ArrowDropDown,
+                                        contentDescription = "Select Time Limit"
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = timerDropdownExpanded,
+                                    onDismissRequest = { timerDropdownExpanded = false },
+                                    modifier = Modifier.background(ProtocolElevatedSurface)
+                                ) {
+                                    TimerMode.entries.forEach { mode ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = mode.label,
+                                                    color = ProtocolTextPrimary,
+                                                    fontFamily = JetBrainsMonoFontFamily
+                                                )
+                                            },
+                                            onClick = {
+                                                onSelectTimerMode(mode)
+                                                timerDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TimerMode.entries.forEach { mode ->
+                                val isSelected = selectedTimerMode == mode
+                                val modeAccent = if (mode == TimerMode.RELAXED) ProtocolCyan else ProtocolMagenta
+                                val modeIcon = if (mode == TimerMode.RELAXED) Icons.Filled.TimerOff else Icons.Filled.Timer
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) modeAccent else ProtocolElevatedSurface)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) modeAccent else ProtocolBorder,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable { onSelectTimerMode(mode) }
+                                        .testTag("timer_${mode.name.lowercase()}_button"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = modeIcon,
+                                            contentDescription = null,
+                                            tint = if (isSelected) Color.Black else modeAccent,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = mode.label,
+                                            style = MaterialTheme.typography.labelLarge.copy(
+                                                fontSize = 12.sp
+                                            ),
+                                            color = if (isSelected) Color.Black else ProtocolTextPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Launch Grid Arena Button
+                    Button(
+                        onClick = onStartMatch,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("start_game_button"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ProtocolMagenta,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "LAUNCH GRID ARENA",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Black
+                            )
+                        )
+                    }
+                }
             }
         }
     }
@@ -3128,10 +3251,10 @@ fun DashboardSessionHistoryCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, ArcadeBorder, RoundedCornerShape(18.dp))
+            .border(1.dp, ProtocolBorder, RoundedCornerShape(18.dp))
             .testTag("dashboard_stats_history_card"),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = ArcadeCardSurface)
+        colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -3149,28 +3272,28 @@ fun DashboardSessionHistoryCard(
                     Icon(
                         imageVector = Icons.Filled.History,
                         contentDescription = null,
-                        tint = ArcadeAmber,
+                        tint = ProtocolAmber,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "SESSION STATS",
+                        text = "PROTOCOL TELEMETRY",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Bold
                         ),
-                        color = ArcadeTextMuted
+                        color = ProtocolTextMuted
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     val p1Stat = sessionStats[1] ?: PlayerSessionStats()
                     val cpuStat = sessionStats[2] ?: PlayerSessionStats()
                     Text(
-                        text = "P1: ${p1Stat.wins}W-${p1Stat.losses}L",
+                        text = "USER: ${p1Stat.wins}W-${p1Stat.losses}L",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Bold
                         ),
-                        color = ArcadeCyan
+                        color = ProtocolCyan
                     )
                     Text(
                         text = "CPU: ${cpuStat.wins}W-${cpuStat.losses}L",
@@ -3178,16 +3301,16 @@ fun DashboardSessionHistoryCard(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Bold
                         ),
-                        color = ArcadeMagenta
+                        color = ProtocolMagenta
                     )
                 }
             }
 
             if (matchHistory.isEmpty()) {
                 Text(
-                    text = "No completed games in this session yet.",
+                    text = "No completed matches in this session yet.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = ArcadeTextMuted
+                    color = ProtocolTextMuted
                 )
             } else {
                 LazyColumn(
@@ -3201,7 +3324,7 @@ fun DashboardSessionHistoryCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(ArcadeElevatedSurface)
+                                .background(ProtocolElevatedSurface)
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -3211,14 +3334,14 @@ fun DashboardSessionHistoryCard(
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontFamily = JetBrainsMonoFontFamily
                                 ),
-                                color = ArcadeTextPrimary
+                                color = ProtocolTextPrimary
                             )
                             Text(
                                 text = item.winnerLabel,
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontWeight = FontWeight.Bold
                                 ),
-                                color = if (item.winnerPlayerNumber == 1) ArcadeCyan else ArcadeMagenta
+                                color = if (item.winnerPlayerNumber == 1) ProtocolCyan else ProtocolMagenta
                             )
                         }
                     }
@@ -3229,7 +3352,7 @@ fun DashboardSessionHistoryCard(
 }
 
 // ============================================================================
-// 7. CREDITS SCREEN & DRIFTING BACKGROUND DOTS
+// 8. CREDITS SCREEN & DRIFTING BACKGROUND DOTS
 // ============================================================================
 
 private data class DriftingDotSpec(
@@ -3410,7 +3533,7 @@ fun CreditsScreen(
                     }
 
                     Text(
-                        text = "ARCADE CREDITS",
+                        text = "SYSTEM CREDITS",
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Black,
@@ -3535,11 +3658,15 @@ private fun CreditSectionCard(
 }
 
 // ============================================================================
-// 8. GAME SCREEN, DYNAMIC GRID RENDERER, HAPTICS & SHRINKING PROGRESS BAR
+// 9. SCREEN 2: THE GRID ARENA (GAMEPLAY)
+//    - Dynamic grid of dots (3x3 up to 6x6)
+//    - Tap between dots to draw glowing lines
+//    - 4th line forming a closed square captures the node, scores +1, and grants extra turn
+//    - Shrinking progress bar for the timer & LocalHapticFeedback for drawing lines
 // ============================================================================
 
 @Composable
-fun GameScreen(
+fun GridArenaScreen(
     soundEnabled: Boolean,
     hapticsEnabled: Boolean,
     activeCampaignLevel: CampaignLevel?,
@@ -3551,8 +3678,6 @@ fun GameScreen(
     blitzRemainingFraction: Float,
     lastTurnForfeitedByTimeout: Boolean,
     boardState: BoardState,
-    sessionStats: Map<Int, PlayerSessionStats>,
-    matchHistory: List<MatchHistoryItem>,
     hoveredEdge: EdgeCoordinate?,
     boardZoom: Float,
     lastHapticEvent: HapticEvent?,
@@ -3569,7 +3694,7 @@ fun GameScreen(
     onAdjustZoom: (Float) -> Unit,
     onSetZoom: (Float) -> Unit,
     onRestartMatch: () -> Unit,
-    onReturnToSetup: () -> Unit,
+    onReturnToCommandCenter: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalGamePalette.current
@@ -3586,7 +3711,7 @@ fun GameScreen(
         )
     }
 
-    // Shrinking progress bar LaunchedEffect for timed modes (Bullet 3s, Blitz 5s, Rapid 10s)
+    // Shrinking progress bar LaunchedEffect for timed modes (3s, 5s, 10s)
     LaunchedEffect(selectedTimerMode, isPlayerTurn, boardState.totalMovesPlayed, boardState.currentPlayer) {
         if (isTimedMode && isPlayerTurn) {
             val totalDurationMs = timerDurationSeconds * 1000L
@@ -3607,7 +3732,7 @@ fun GameScreen(
         }
     }
 
-    // Direct LocalHapticFeedback on human move execution: light ticks on line draws, heavy buzzes on box captures
+    // Direct LocalHapticFeedback on line draws (light tick) and node captures (heavy buzz)
     val onHumanMoveExecuted: (EdgeCoordinate) -> Unit = { edge ->
         if (isPlayerTurn && DotsAndBoxesEngine.isEdgeAvailable(boardState, edge)) {
             val outcome = DotsAndBoxesEngine.makeMove(boardState, edge)
@@ -3645,7 +3770,7 @@ fun GameScreen(
     }
 
     BackHandler {
-        onReturnToSetup()
+        onReturnToCommandCenter()
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "neonPulse")
@@ -3752,7 +3877,8 @@ fun GameScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF121212))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .testTag("grid_arena_screen"),
         contentAlignment = Alignment.Center
     ) {
         DriftingNeonDotsBackground()
@@ -3775,7 +3901,7 @@ fun GameScreen(
                 totalBoxes = boardState.totalBoxes,
                 onToggleSound = onToggleSound,
                 onToggleHaptics = onToggleHaptics,
-                onReturnToSetup = onReturnToSetup
+                onReturnToSetup = onReturnToCommandCenter
             )
 
             ScoreboardHeader(
@@ -3922,9 +4048,6 @@ fun GameScreen(
                 selectedGridSize = selectedGridSize,
                 selectedCpuDifficulty = selectedCpuDifficulty,
                 selectedTimerMode = selectedTimerMode,
-                players = boardState.players,
-                sessionStats = sessionStats,
-                matchHistory = matchHistory,
                 onSelectGridSize = onSelectGridSize,
                 onSelectCpuDifficulty = onSelectCpuDifficulty,
                 onSelectTimerMode = onSelectTimerMode,
@@ -3935,8 +4058,8 @@ fun GameScreen(
 
         if (overlayBurstAlpha.value > 0.02f && boardState.currentComboCount >= 2) {
             val isDouble = boardState.lastCapturedBoxes.size >= 2
-            val mainTitle = if (isDouble) "DOUBLE CAPTURE!" else "COMBO x${boardState.currentComboCount}!"
-            val subTitle = if (isDouble) "COMBO x${boardState.currentComboCount} STREAK!" else "NEON BONUS STREAK!"
+            val mainTitle = if (isDouble) "DOUBLE NODE CAPTURE!" else "COMBO x${boardState.currentComboCount}!"
+            val subTitle = if (isDouble) "COMBO x${boardState.currentComboCount} STREAK!" else "PROTOCOL OVERDRIVE!"
 
             Box(
                 modifier = Modifier
@@ -3992,7 +4115,7 @@ fun GameScreen(
                 justUnlockedNextCampaignLevel = justUnlockedNextCampaignLevel,
                 onAdvanceToNextCampaignLevel = onAdvanceToNextCampaignLevel,
                 onPlayAgain = onRestartMatch,
-                onReturnToSetup = onReturnToSetup
+                onReturnToSetup = onReturnToCommandCenter
             )
         }
     }
@@ -4004,9 +4127,6 @@ private fun BottomControlsAndFooter(
     selectedGridSize: GridSize,
     selectedCpuDifficulty: CpuDifficulty,
     selectedTimerMode: TimerMode,
-    players: List<PlayerConfig>,
-    sessionStats: Map<Int, PlayerSessionStats>,
-    matchHistory: List<MatchHistoryItem>,
     onSelectGridSize: (GridSize) -> Unit,
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onSelectTimerMode: (TimerMode) -> Unit,
@@ -4028,7 +4148,7 @@ private fun BottomControlsAndFooter(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Row 1: Grid Size Segmented Selector (3x3, 4x4, 5x5, 6x6) + Restart Game Button
+            // Row 1: Grid Size Segmented Selector (3x3, 4x4, 5x5, 6x6) + Restart Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -4149,7 +4269,7 @@ private fun BottomControlsAndFooter(
                 }
             }
 
-            // Row 3: Time Mode Selector (Relaxed, Bullet 3s, Blitz 5s, Rapid 10s)
+            // Row 3: Time Limit Selector (Relaxed, 3s, 5s, 10s)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -4222,7 +4342,7 @@ private fun BoardZoomToolbar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "$gridLabel BOX GRID • 8dp DOTS • 6dp LINES",
+                text = "THE GRID ARENA • $gridLabel NODES",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = palette.mutedText
             )
@@ -4336,19 +4456,19 @@ private fun TopGameToolbar(
         ) {
             Icon(
                 imageVector = Icons.Filled.Tune,
-                contentDescription = "Main Menu",
+                contentDescription = "Command Center",
                 modifier = Modifier.size(17.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Main Menu",
+                text = "Command Center",
                 style = MaterialTheme.typography.labelLarge
             )
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "$claimedBoxes / $totalBoxes boxes",
+                text = "$claimedBoxes / $totalBoxes nodes",
                 style = MaterialTheme.typography.labelSmall,
                 color = palette.mutedText
             )
@@ -4543,7 +4663,7 @@ private fun ScoreboardHeader(
                                 modifier = Modifier.size(13.dp)
                             )
                             Text(
-                                text = "${selectedTimerMode.label.uppercase()} TURN TIMER",
+                                text = "TIME LIMIT (${selectedTimerMode.label.uppercase()})",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
@@ -4589,7 +4709,7 @@ private fun ScoreboardHeader(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${selectedTimerMode.label} Timer Expired — Turn Forfeited to CPU!",
+                        text = "Time Limit (${selectedTimerMode.label}) Expired — Turn Forfeited to CPU!",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp
@@ -4601,15 +4721,11 @@ private fun ScoreboardHeader(
 
             AnimatedVisibility(visible = boardState.hasExtraTurnStreak && !boardState.isGameOver) {
                 val activeColor = playerAccentColor(boardState.currentPlayer)
-                val activeLabel = if (boardState.isPlayerAi(boardState.currentPlayer)) {
-                    "CPU"
-                } else {
-                    "Player"
-                }
+                val activeLabel = if (boardState.isPlayerAi(boardState.currentPlayer)) "CPU" else "USER"
                 val badgeText = if (boardState.isMultiSquareCombo) {
-                    "${boardState.currentComboCount}× COMBO PULSE! EXTRA TURN"
+                    "${boardState.currentComboCount}× NODE CHAIN! EXTRA TURN"
                 } else {
-                    "STREAK! EXTRA TURN"
+                    "NODE CAPTURED! EXTRA TURN"
                 }
 
                 Row(
@@ -4711,7 +4827,7 @@ private fun PlayerScorePill(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (player.isAi) "CPU" else "P1",
+                    text = if (player.isAi) "AI" else "P1",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontWeight = FontWeight.Black,
@@ -4723,7 +4839,7 @@ private fun PlayerScorePill(
 
             Column {
                 Text(
-                    text = if (player.isAi) "CPU (MAGENTA)" else "PLAYER (CYAN)",
+                    text = if (player.isAi) "CPU (MAGENTA)" else "USER (CYAN)",
                     style = MaterialTheme.typography.labelSmall,
                     color = accentColor
                 )
@@ -4834,11 +4950,6 @@ private fun DotsAndBoxesGrid(
                         if (dotCol < boardState.boxCols) {
                             val boxOwner = boardState.boxes[dotRow][dotCol]
                             val boxCoord = BoxCoordinate(dotRow, dotCol)
-                            val ownerLetter = if (boxOwner != 0) {
-                                boardState.letterForPlayer(boxOwner)
-                            } else {
-                                ""
-                            }
                             val isNewlyCaptured = boardState.lastCapturedBoxes.contains(boxCoord)
                             val isInComboChain = boardState.isMultiSquareCombo &&
                                 boardState.comboChainBoxes.contains(boxCoord)
@@ -4847,7 +4958,6 @@ private fun DotsAndBoxesGrid(
                                 row = dotRow,
                                 col = dotCol,
                                 owner = boxOwner,
-                                letter = ownerLetter,
                                 isNewlyCaptured = isNewlyCaptured,
                                 isInComboChain = isInComboChain,
                                 comboPulseFraction = if (isNewlyCaptured || isInComboChain) {
@@ -5085,7 +5195,6 @@ private fun PlayableBoxCell(
     row: Int,
     col: Int,
     owner: Int,
-    letter: String,
     isNewlyCaptured: Boolean,
     isInComboChain: Boolean,
     comboPulseFraction: Float,
@@ -5227,13 +5336,13 @@ private fun GameOverBanner(
     }
 
     val titleText = if (winner != null && winner > 0) {
-        val winnerName = if (boardState.isPlayerAi(winner)) "CPU" else "Player"
-        "$winnerName Wins with ${boardState.scoreForPlayer(winner)} Boxes!"
+        val winnerName = if (boardState.isPlayerAi(winner)) "CPU" else "User"
+        "$winnerName Wins with ${boardState.scoreForPlayer(winner)} Nodes!"
     } else {
         "Match Drawn — Tied at ${boardState.maxScore}!"
     }
 
-    val summaryScores = "Player: ${boardState.player1Score}  •  CPU: ${boardState.player2Score}"
+    val summaryScores = "User: ${boardState.player1Score}  •  CPU: ${boardState.player2Score}"
 
     val nextLevel = activeCampaignLevel?.nextLevel()
     val canAdvanceCampaign = activeCampaignLevel != null && winner == 1 && nextLevel != null
@@ -5499,8 +5608,8 @@ private fun FullScreenVictoryAnimationOverlay(
         ) {
             val headlineText = when {
                 winner == null || winner == 0 -> "Match Drawn — Tied at ${boardState.maxScore}!"
-                boardState.isPlayerAi(winner) -> "CPU WINS (${boardState.scoreForPlayer(winner)} PTS)"
-                else -> "PLAYER VICTORY! (${boardState.scoreForPlayer(winner)} PTS)"
+                boardState.isPlayerAi(winner) -> "CPU WINS (${boardState.scoreForPlayer(winner)} NODES)"
+                else -> "USER VICTORY! (${boardState.scoreForPlayer(winner)} NODES)"
             }
             val nextLevel = activeCampaignLevel?.nextLevel()
             val canAdvanceCampaign = activeCampaignLevel != null && winner == 1 && nextLevel != null
@@ -5542,7 +5651,7 @@ private fun FullScreenVictoryAnimationOverlay(
                     }
 
                     Text(
-                        text = "MATCH COMPLETE • CHAMPION DECLARED",
+                        text = "PROTOCOL COMPLETE • WINNER DECLARED",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             letterSpacing = 1.5.sp,
@@ -5567,7 +5676,7 @@ private fun FullScreenVictoryAnimationOverlay(
                         textAlign = TextAlign.Center
                     )
 
-                    val scoreBreakdown = "Player (Cyan): ${boardState.player1Score}   •   CPU (Magenta): ${boardState.player2Score}"
+                    val scoreBreakdown = "User (Cyan): ${boardState.player1Score}   •   CPU (Magenta): ${boardState.player2Score}"
                     Text(
                         text = scoreBreakdown,
                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -5580,7 +5689,7 @@ private fun FullScreenVictoryAnimationOverlay(
 
                     if (activeCampaignLevel != null) {
                         val campaignStatusText = when {
-                            winner == 1 && nextLevel == null -> "CHAMPION! ALL 6 TOURNAMENT LEVELS CLEARED!"
+                            winner == 1 && nextLevel == null -> "CHAMPION! ALL 6 CAMPAIGN STAGES CLEARED!"
                             justUnlockedNextCampaignLevel && nextLevel != null ->
                                 "NEW STAGE UNLOCKED: LEVEL ${nextLevel.levelNumber}!"
                             winner == 1 && nextLevel != null -> "Level ${activeCampaignLevel.levelNumber} Cleared!"
@@ -5652,7 +5761,7 @@ private fun FullScreenVictoryAnimationOverlay(
                             modifier = Modifier.testTag("victory_main_menu_button")
                         ) {
                             Text(
-                                text = "Main Menu",
+                                text = "Command Center",
                                 color = palette.mutedText
                             )
                         }
@@ -5661,7 +5770,7 @@ private fun FullScreenVictoryAnimationOverlay(
                             modifier = Modifier.testTag("dismiss_victory_overlay_button")
                         ) {
                             Text(
-                                text = "Inspect Board",
+                                text = "Inspect Grid",
                                 color = palette.primaryText
                             )
                         }

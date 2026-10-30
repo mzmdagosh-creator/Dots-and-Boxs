@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Dots & Boxes"
+rootProject.name = "Neon Grid Protocol"
 
 include(":app")
