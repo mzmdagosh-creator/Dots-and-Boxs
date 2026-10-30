@@ -1,300 +1,523 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="classic-dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dots and Boxes - 5x9 (PvP &amp; CPU AI)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dots and Boxes — 5x9 Neon Arcade Edition</title>
     <style>
-        :root {
-            --bg-color: #0f172a;
-            --surface-color: #1e293b;
-            --surface-elevated: #0b1324;
+        /* =========================================================================
+           THEME CSS VARIABLES: 'Classic Dark' (Default) & 'High Contrast' Light Theme
+           ========================================================================= */
+        :root,
+        [data-theme="classic-dark"] {
+            --bg-deep: #060b16;
+            --bg-radial-top: #172554;
+            --bg-surface: #0f172a;
+            --bg-wrapper: rgba(15, 23, 42, 0.90);
+            --bg-card: #090f1d;
+            --bg-elevated: #1e293b;
+            --border-color: #334155;
+            --border-subtle: rgba(148, 163, 184, 0.22);
             --text-color: #f8fafc;
             --muted-text: #94a3b8;
             --dot-color: #e2e8f0;
-            --line-idle: #334155;
+            --dot-glow: rgba(248, 250, 252, 0.65);
+            --line-idle: #26354d;
             --line-hover: #64748b;
+
+            /* Vibrant Neon Player Colors (Classic Dark) */
             --p1-color: #3b82f6;
+            --p1-neon: #60a5fa;
+            --p1-glow: rgba(59, 130, 246, 0.75);
+            --p1-fill: rgba(59, 130, 246, 0.28);
+
             --p2-color: #ef4444;
+            --p2-neon: #f87171;
+            --p2-glow: rgba(239, 68, 68, 0.75);
+            --p2-fill: rgba(239, 68, 68, 0.28);
+
             --p3-color: #10b981;
+            --p3-neon: #34d399;
+            --p3-glow: rgba(16, 185, 129, 0.75);
+            --p3-fill: rgba(16, 185, 129, 0.28);
+
             --p4-color: #a855f7;
-            --accent-amber: #facc15;
-            --dot-size: clamp(9px, 1.9vw, 12px);
-            --box-size: clamp(26px, 7.4vw, 50px);
-            --board-zoom: 1;
+            --p4-neon: #c084fc;
+            --p4-glow: rgba(168, 85, 247, 0.75);
+            --p4-fill: rgba(168, 85, 247, 0.28);
+
+            /* Dynamic Auto-Scale Factor computed by JS for 100% zero-scroll visibility */
+            --board-auto-scale: 1;
+        }
+
+        [data-theme="high-contrast"] {
+            --bg-deep: #f8fafc;
+            --bg-radial-top: #e2e8f0;
+            --bg-surface: #ffffff;
+            --bg-wrapper: rgba(255, 255, 255, 0.98);
+            --bg-card: #f1f5f9;
+            --bg-elevated: #e2e8f0;
+            --border-color: #0f172a;
+            --border-subtle: #334155;
+            --text-color: #090d16;
+            --muted-text: #334155;
+            --dot-color: #090d16;
+            --dot-glow: rgba(15, 23, 42, 0.25);
+            --line-idle: #cbd5e1;
+            --line-hover: #475569;
+
+            /* High-Contrast Accessible Player Colors */
+            --p1-color: #0044cc;
+            --p1-neon: #003399;
+            --p1-glow: rgba(0, 68, 204, 0.45);
+            --p1-fill: rgba(0, 68, 204, 0.22);
+
+            --p2-color: #c81e1e;
+            --p2-neon: #9b1c1c;
+            --p2-glow: rgba(200, 30, 30, 0.45);
+            --p2-fill: rgba(200, 30, 30, 0.22);
+
+            --p3-color: #046c4e;
+            --p3-neon: #03543f;
+            --p3-glow: rgba(4, 108, 78, 0.45);
+            --p3-fill: rgba(4, 108, 78, 0.22);
+
+            --p4-color: #6b21a8;
+            --p4-neon: #581c87;
+            --p4-glow: rgba(107, 33, 168, 0.45);
+            --p4-fill: rgba(107, 33, 168, 0.22);
         }
 
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: radial-gradient(circle at top, #172554 0%, var(--bg-color) 68%);
+        html, body {
+            width: 100vw;
+            height: 100dvh;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% 18%, var(--bg-radial-top) 0%, var(--bg-deep) 72%);
             color: var(--text-color);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.25s ease, color 0.25s ease;
+        }
+
+        /* =========================================================================
+           KEYFRAME ANIMATIONS: Glow Pulse, Heartbeat, Camera Shake, Box Slam, Combo Burst
+           ========================================================================= */
+        @keyframes glowPulse {
+            0%, 100% {
+                filter: brightness(1) drop-shadow(0 0 5px currentColor);
+            }
+            50% {
+                filter: brightness(1.28) drop-shadow(0 0 14px currentColor);
+            }
+        }
+
+        @keyframes turnNeonIndicator {
+            0%, 100% {
+                box-shadow: 0 0 10px var(--active-glow, var(--p1-glow)),
+                            inset 0 0 6px rgba(255, 255, 255, 0.08);
+                transform: translateY(0);
+            }
+            50% {
+                box-shadow: 0 0 22px var(--active-glow, var(--p1-glow)),
+                            0 0 34px var(--active-glow, var(--p1-glow)),
+                            inset 0 0 12px rgba(255, 255, 255, 0.16);
+                transform: translateY(-1px);
+            }
+        }
+
+        @keyframes comboHeartbeat {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 14px var(--active-glow), 0 0 28px var(--active-glow);
+            }
+            20% {
+                transform: scale(1.06);
+                box-shadow: 0 0 26px var(--active-glow), 0 0 48px var(--active-glow);
+            }
+            40% {
+                transform: scale(0.99);
+            }
+            60% {
+                transform: scale(1.04);
+                box-shadow: 0 0 22px var(--active-glow), 0 0 42px var(--active-glow);
+            }
+        }
+
+        @keyframes cameraRumble {
+            0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+            15%  { transform: translate3d(-6px, 4px, 0) rotate(-0.6deg); }
+            30%  { transform: translate3d(6px, -5px, 0) rotate(0.6deg); }
+            45%  { transform: translate3d(-5px, -3px, 0) rotate(-0.4deg); }
+            60%  { transform: translate3d(5px, 4px, 0) rotate(0.4deg); }
+            75%  { transform: translate3d(-3px, 2px, 0) rotate(-0.2deg); }
+            100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+        }
+
+        @keyframes boxCaptureSlam {
+            0% {
+                transform: scale(0.5);
+                filter: brightness(2.2);
+                box-shadow: 0 0 32px currentColor, inset 0 0 22px currentColor;
+            }
+            45% {
+                transform: scale(1.18);
+                filter: brightness(1.5);
+                box-shadow: 0 0 24px currentColor, inset 0 0 18px currentColor;
+            }
+            75% {
+                transform: scale(0.95);
+            }
+            100% {
+                transform: scale(1);
+                filter: brightness(1);
+            }
+        }
+
+        @keyframes charJumpExpand {
+            0% {
+                opacity: 0;
+                transform: translateY(12px) scale(0.2) rotate(-12deg);
+            }
+            45% {
+                opacity: 1;
+                transform: translateY(-8px) scale(1.9) rotate(6deg);
+                text-shadow: 0 0 20px currentColor;
+            }
+            75% {
+                transform: translateY(2px) scale(0.88) rotate(-2deg);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1) rotate(0deg);
+                text-shadow: 0 0 12px currentColor;
+            }
+        }
+
+        @keyframes comboBannerBurst {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.25) rotate(-8deg);
+            }
+            28% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.18) rotate(3deg);
+            }
+            52% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(0.96) rotate(-1deg);
+            }
+            75% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.04) rotate(0deg);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -68%) scale(1.28) rotate(0deg);
+            }
+        }
+
+        /* =========================================================================
+           OUTER VIEWPORT WRAPPER (5-10% Natural Padding Boundary, Zero Scroll)
+           ========================================================================= */
+        .app-viewport-wrapper {
+            width: 93vw;
+            height: 93dvh;
+            max-width: 980px;
+            max-height: 880px;
+            background: var(--bg-wrapper);
+            backdrop-filter: blur(12px);
+            border: 2px solid var(--border-subtle);
+            border-radius: 24px;
+            box-shadow: 0 20px 55px rgba(0, 0, 0, 0.45);
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 16px;
+            justify-content: space-between;
+            padding: clamp(8px, 1.6vh, 18px) clamp(10px, 2.2vw, 24px);
+            position: relative;
+            overflow: hidden;
+            transition: background 0.25s ease, border-color 0.25s ease;
         }
 
-        .container {
-            background: var(--surface-color);
-            padding: 1.75rem;
-            border-radius: 1.25rem;
-            border: 1px solid #334155;
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
-            text-align: center;
+        .app-viewport-wrapper.rumble-active {
+            animation: cameraRumble 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+        }
+
+        /* =========================================================================
+           SETUP / SETTINGS SCREEN
+           ========================================================================= */
+        .setup-screen {
             width: 100%;
-            max-width: 720px;
-            overflow-x: auto;
-            transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+            max-width: 470px;
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.45rem, 1.3vh, 0.85rem);
+            text-align: center;
         }
 
-        @keyframes comboBoardZoom {
-            0% { transform: scale(1); }
-            45% { transform: scale(1.048); box-shadow: 0 0 36px rgba(59, 130, 246, 0.45); }
-            100% { transform: scale(1); }
-        }
-
-        @keyframes boxComboPulse {
-            0% { transform: scale(1); filter: brightness(1); }
-            50% { transform: scale(1.16); filter: brightness(1.45); }
-            100% { transform: scale(1); filter: brightness(1); }
-        }
-
-        .container.combo-zoom {
-            animation: comboBoardZoom 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .box.combo-pulse {
-            animation: boxComboPulse 0.44s ease-out;
-        }
-
-        h2 {
-            margin: 0 0 0.25rem 0;
-            font-size: 1.85rem;
+        .setup-screen h2 {
+            font-size: clamp(1.35rem, 3.6vw, 1.9rem);
             letter-spacing: -0.02em;
+            color: var(--text-color);
         }
 
         .subtitle {
-            margin: 0 0 1.25rem 0;
             color: var(--muted-text);
-            font-size: 0.95rem;
+            font-size: 0.84rem;
         }
 
-        /* Setup Screen */
-        .setup-screen {
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
-            max-width: 460px;
-            margin: 0 auto;
+        .settings-row {
+            display: grid;
+            grid-template-columns: 1.35fr 0.85fr;
+            gap: 0.55rem;
         }
 
         .section-label {
-            font-size: 0.8rem;
-            font-weight: 700;
+            font-size: 0.71rem;
+            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.06em;
             color: var(--muted-text);
-            margin-bottom: 0.4rem;
+            margin-bottom: 0.28rem;
             text-align: left;
         }
 
         .segmented-control {
             display: flex;
-            gap: 0.5rem;
-            background: var(--surface-elevated);
-            padding: 0.35rem;
-            border-radius: 0.75rem;
-            border: 1px solid #334155;
+            gap: 0.32rem;
+            background: var(--bg-card);
+            padding: 0.26rem;
+            border-radius: 0.68rem;
+            border: 1.5px solid var(--border-color);
         }
 
         .seg-btn {
             flex: 1;
-            padding: 0.6rem 0.75rem;
-            font-size: 0.92rem;
+            padding: 0.45rem 0.5rem;
+            font-size: 0.8rem;
             font-weight: 700;
             border: none;
-            border-radius: 0.5rem;
+            border-radius: 0.45rem;
             background: transparent;
             color: var(--muted-text);
             cursor: pointer;
-            margin-top: 0;
-            transition: all 0.2s ease;
+            transition: all 0.18s ease;
         }
 
         .seg-btn.active {
             background: var(--p1-color);
             color: #ffffff;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+            box-shadow: 0 0 12px var(--p1-glow);
         }
 
-        .seg-btn.diff-easy.active { background: #10b981; }
-        .seg-btn.diff-medium.active { background: #f59e0b; color: #0f172a; }
-        .seg-btn.diff-hard.active { background: #ef4444; }
+        .seg-btn.diff-easy.active { background: var(--p3-color); color: #ffffff; }
+        .seg-btn.diff-medium.active { background: #d97706; color: #ffffff; }
+        .seg-btn.diff-hard.active { background: var(--p2-color); color: #ffffff; }
+
+        .inputs-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.55rem;
+        }
 
         .input-group {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
             align-items: center;
-            gap: 1rem;
-            font-size: 1.05rem;
-            background: var(--surface-elevated);
-            padding: 0.65rem 1rem;
-            border-radius: 0.75rem;
-            border: 1px solid #334155;
+            gap: 0.3rem;
+            background: var(--bg-card);
+            padding: 0.5rem;
+            border-radius: 0.7rem;
+            border: 1.5px solid var(--border-color);
         }
 
-        input {
-            padding: 0.45rem;
-            border-radius: 0.5rem;
-            border: 1px solid #475569;
-            background: #0f172a;
-            color: white;
-            text-align: center;
-            width: 3.2rem;
-            font-size: 1.25rem;
-            font-weight: 700;
+        .input-group label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--muted-text);
             text-transform: uppercase;
         }
 
+        input {
+            padding: 0.25rem;
+            border-radius: 0.45rem;
+            border: 1.5px solid var(--border-color);
+            background: var(--bg-surface);
+            color: var(--text-color);
+            text-align: center;
+            width: 2.9rem;
+            height: 2.45rem;
+            font-size: 1.15rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--p1-color);
+            box-shadow: 0 0 10px var(--p1-glow);
+        }
+
         input:disabled {
-            opacity: 0.75;
-            background: #1e293b;
+            opacity: 0.88;
+            background: var(--p2-fill);
             border-color: var(--p2-color);
-            color: var(--p2-color);
+            color: var(--p2-neon);
             cursor: not-allowed;
         }
 
         .error-text {
-            color: #f87171;
-            font-size: 0.88rem;
-            min-height: 1.2rem;
+            color: var(--p2-color);
+            font-size: 0.8rem;
+            font-weight: 700;
+            min-height: 1rem;
         }
 
         button.primary-btn {
-            padding: 0.85rem 1.5rem;
-            font-size: 1.1rem;
-            font-weight: bold;
+            padding: 0.7rem 1.3rem;
+            font-size: 1rem;
+            font-weight: 800;
             border: none;
-            border-radius: 0.65rem;
+            border-radius: 0.7rem;
             background: var(--p1-color);
-            color: white;
+            color: #ffffff;
             cursor: pointer;
-            transition: opacity 0.2s, transform 0.15s;
-            margin-top: 0.25rem;
+            box-shadow: 0 0 18px var(--p1-glow);
+            transition: transform 0.15s, filter 0.2s;
         }
 
         button.primary-btn:hover {
-            opacity: 0.92;
+            filter: brightness(1.08);
             transform: translateY(-1px);
         }
 
-        /* Game Screen */
+        /* =========================================================================
+           GAMEPLAY INTERFACE (Scoreboard + Auto-Scaled 5x9 Grid + Persistent Stats Footer)
+           ========================================================================= */
         .game-screen {
             display: none;
             flex-direction: column;
             align-items: center;
+            justify-content: space-between;
             width: 100%;
+            height: 100%;
+            gap: 6px;
+        }
+
+        .top-hud {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex-shrink: 0;
         }
 
         .header {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 6px;
             width: 100%;
-            margin-bottom: 0.85rem;
-            font-size: 1.15rem;
-            font-weight: bold;
         }
 
         .player-card {
-            padding: 0.6rem 0.9rem;
-            border-radius: 0.65rem;
-            background: var(--surface-elevated);
-            border: 2px solid transparent;
-            transition: border-color 0.25s, box-shadow 0.25s;
+            padding: 0.42rem 0.68rem;
+            border-radius: 0.68rem;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            color: var(--text-color);
             display: flex;
             align-items: center;
             justify-content: space-between;
+            font-size: clamp(0.78rem, 2vw, 0.95rem);
+            font-weight: 800;
+            transition: border-color 0.25s, transform 0.25s, background 0.25s;
         }
 
-        .active-p0 { border-color: var(--p1-color); box-shadow: 0 0 14px rgba(59, 130, 246, 0.35); }
-        .active-p1 { border-color: var(--p2-color); box-shadow: 0 0 14px rgba(239, 68, 68, 0.35); }
-        .active-p2 { border-color: var(--p3-color); box-shadow: 0 0 14px rgba(16, 185, 129, 0.35); }
-        .active-p3 { border-color: var(--p4-color); box-shadow: 0 0 14px rgba(168, 85, 247, 0.35); }
+        /* Pulsing Turn Neon Indicator for the Active Player */
+        .player-card.active-turn {
+            border-color: var(--active-color);
+            animation: turnNeonIndicator 1.8s infinite ease-in-out;
+        }
 
-        .status-bar {
+        /* Intense Rhythmic Glowing Heartbeat when on a Combo Streak */
+        .player-card.combo-heartbeat {
+            border-color: var(--active-color);
+            animation: comboHeartbeat 0.75s infinite ease-in-out !important;
+        }
+
+        .status-strip {
             display: flex;
             align-items: center;
             justify-content: space-between;
             width: 100%;
-            margin-bottom: 1rem;
-            min-height: 2rem;
-            gap: 0.5rem;
-            flex-wrap: wrap;
+            gap: 8px;
         }
 
         #turn-status-indicator {
-            font-size: 0.95rem;
-            font-weight: 700;
-            padding: 0.35rem 0.85rem;
+            font-size: clamp(0.74rem, 1.9vw, 0.88rem);
+            font-weight: 800;
+            padding: 0.24rem 0.7rem;
             border-radius: 999px;
-            background: var(--surface-elevated);
-            border: 1px solid #334155;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
             color: var(--text-color);
+            letter-spacing: 0.02em;
         }
 
         #turn-status-indicator.cpu-thinking {
             border-color: var(--p2-color);
-            color: #fca5a5;
+            color: var(--p2-neon);
+            box-shadow: 0 0 10px var(--p2-glow);
         }
 
-        #turn-status-indicator.combo-active {
-            border-color: var(--accent-amber);
-            color: var(--accent-amber);
+        #turn-status-indicator.combo-streak {
+            border-color: #d97706;
+            color: #d97706;
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
         }
 
-        .zoom-controls {
-            display: flex;
-            gap: 0.35rem;
-            align-items: center;
+        #winner-display {
+            font-size: clamp(0.88rem, 2.3vw, 1.15rem);
+            font-weight: 800;
+            min-height: 1.2rem;
         }
 
-        .zoom-btn {
-            padding: 0.3rem 0.65rem;
-            font-size: 0.8rem;
-            font-weight: 700;
-            border-radius: 0.4rem;
-            border: 1px solid #475569;
-            background: var(--surface-elevated);
-            color: var(--text-color);
-            cursor: pointer;
-        }
-
-        /* Grid Board Layout: 9 rows x 17 cols (Dots + Lines + Boxes) */
-        .board-viewport {
+        /* =========================================================================
+           AUTO-SCALING STAGE FOR THE 5x9 GRID ("ZOOM OUT" SOLUTION)
+           ========================================================================= */
+        #board-scale-stage {
+            flex: 1;
             width: 100%;
+            min-height: 0;
             display: flex;
+            align-items: center;
             justify-content: center;
-            overflow-x: auto;
-            padding: 0.5rem 0;
+            position: relative;
+            overflow: hidden;
         }
 
         #board {
             display: grid;
-            transform: scale(var(--board-zoom));
-            transform-origin: top center;
-            grid-template-columns: repeat(8, var(--dot-size) var(--box-size)) var(--dot-size);
-            grid-template-rows: repeat(4, var(--dot-size) var(--box-size)) var(--dot-size);
-            gap: 0;
-            margin-bottom: 1.25rem;
-            user-select: none;
+            grid-template-columns: repeat(8, 12px 50px) 12px;
+            grid-template-rows: repeat(4, 12px 50px) 12px;
+            width: 508px;
+            height: 260px;
+            transform: scale(var(--board-auto-scale));
+            transform-origin: center center;
+            transition: transform 0.2s ease-out;
+            position: relative;
+            flex-shrink: 0;
         }
 
         #board.board-locked {
@@ -302,71 +525,197 @@
         }
 
         .dot {
-            width: var(--dot-size);
-            height: var(--dot-size);
+            width: 12px;
+            height: 12px;
             background-color: var(--dot-color);
             border-radius: 50%;
-            z-index: 2;
+            box-shadow: 0 0 7px var(--dot-glow);
+            z-index: 3;
         }
 
         .line {
             background-color: var(--line-idle);
             cursor: pointer;
-            transition: background-color 0.18s, transform 0.15s;
             border-radius: 999px;
+            transition: background-color 0.18s, box-shadow 0.2s, transform 0.15s;
+            position: relative;
+            z-index: 2;
+        }
+
+        .line::after {
+            content: '';
+            position: absolute;
+            inset: -6px;
         }
 
         .line:hover:not(.drawn) {
             background-color: var(--line-hover);
+            box-shadow: 0 0 8px var(--dot-glow);
         }
 
         .line.drawn {
             cursor: default;
+            animation: glowPulse 2.4s infinite ease-in-out;
         }
 
         .h-line {
-            height: var(--dot-size);
+            height: 10px;
             width: 100%;
+            align-self: center;
         }
 
         .v-line {
-            width: var(--dot-size);
+            width: 10px;
             height: 100%;
+            justify-self: center;
         }
 
         .box {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: clamp(1rem, 3.2vw, 1.65rem);
-            font-weight: 800;
-            border-radius: 0.35rem;
-            transition: background-color 0.25s, transform 0.2s;
+            font-size: 1.85rem;
+            font-weight: 900;
+            border-radius: 6px;
+            position: relative;
+            overflow: visible;
         }
 
-        #winner-display {
-            font-size: 1.35rem;
-            font-weight: bold;
-            margin-bottom: 0.75rem;
-            min-height: 1.8rem;
+        .box.captured-box {
+            animation: boxCaptureSlam 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .box-char {
+            display: inline-block;
+            animation: charJumpExpand 0.56s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* =========================================================================
+           GIANT NEON COMBO OVERLAY ALERT & PARTICLE EXPLOSION LAYER
+           ========================================================================= */
+        #combo-burst-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            pointer-events: none;
+            z-index: 30;
+            text-align: center;
+            white-space: nowrap;
+            opacity: 0;
+        }
+
+        #combo-burst-overlay.burst-active {
+            animation: comboBannerBurst 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .combo-main-title {
+            font-size: clamp(1.8rem, 6vw, 3rem);
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #ffffff;
+            text-shadow:
+                0 0 12px var(--burst-color, #3b82f6),
+                0 0 26px var(--burst-color, #3b82f6),
+                0 0 48px var(--burst-color, #3b82f6);
+        }
+
+        .combo-sub-title {
+            font-size: clamp(0.9rem, 2.8vw, 1.25rem);
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #facc15;
+            text-shadow: 0 0 14px rgba(250, 204, 21, 0.85);
+        }
+
+        #particle-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 25;
+        }
+
+        /* =========================================================================
+           PERSISTENT FOOTER & SESSION STATS SECTION
+           ========================================================================= */
+        .game-footer {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .stats-footer-panel {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 0.38rem 0.65rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .stats-title {
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted-text);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stats-tallies-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .stat-pill {
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .footer-actions {
             display: flex;
-            gap: 0.75rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
             justify-content: center;
             width: 100%;
         }
 
         .secondary-btn {
-            padding: 0.65rem 1.2rem;
-            font-size: 0.95rem;
+            padding: 0.42rem 0.85rem;
+            font-size: 0.8rem;
             font-weight: 700;
-            border: 1px solid #475569;
-            border-radius: 0.5rem;
-            background: #334155;
-            color: white;
+            border: 1.5px solid var(--border-color);
+            border-radius: 0.55rem;
+            background: var(--bg-elevated);
+            color: var(--text-color);
             cursor: pointer;
+            transition: transform 0.12s, filter 0.15s;
+        }
+
+        .secondary-btn:hover {
+            filter: brightness(1.06);
         }
 
         .hidden { display: none !important; }
@@ -374,15 +723,40 @@
 </head>
 <body>
 
-    <div id="main-container" class="container">
-        <!-- 1. Pre-game Configuration -->
+    <div id="app-wrapper" class="app-viewport-wrapper">
+        <canvas id="particle-canvas"></canvas>
+
+        <!-- Giant Animated Neon Combo Overlay -->
+        <div id="combo-burst-overlay">
+            <div id="combo-main-text" class="combo-main-title">COMBO x2!</div>
+            <div id="combo-sub-text" class="combo-sub-title">BONUS STREAK!</div>
+        </div>
+
+        <!-- 1. Pre-Game Setup & Settings Screen -->
         <div id="setup-screen" class="setup-screen">
             <div>
-                <h2>Dots and Boxes</h2>
-                <p class="subtitle">5×9 Grid (32 Playable Boxes)</p>
+                <h2>Dots &amp; Boxes</h2>
+                <p class="subtitle">5×9 Grid • 32 Boxes • Web Audio &amp; Session Stats</p>
             </div>
 
-            <!-- Game Mode Selector: Player vs Player or Player vs Computer (CPU) -->
+            <!-- Theme Picker & Sound Settings -->
+            <div class="settings-row">
+                <div>
+                    <div class="section-label">Theme Picker</div>
+                    <div class="segmented-control">
+                        <button type="button" id="theme-dark-btn" class="seg-btn active" onclick="setTheme('classic-dark')">Classic Dark</button>
+                        <button type="button" id="theme-hc-btn" class="seg-btn" onclick="setTheme('high-contrast')">High Contrast</button>
+                    </div>
+                </div>
+                <div>
+                    <div class="section-label">Audio</div>
+                    <div class="segmented-control">
+                        <button type="button" id="sound-on-btn" class="seg-btn active" onclick="setSoundEnabled(true)">SFX On</button>
+                        <button type="button" id="sound-off-btn" class="seg-btn" onclick="setSoundEnabled(false)">Mute</button>
+                    </div>
+                </div>
+            </div>
+
             <div>
                 <div class="section-label">Game Mode</div>
                 <div class="segmented-control">
@@ -391,7 +765,6 @@
                 </div>
             </div>
 
-            <!-- CPU Difficulty Selector (Shown only in CPU Mode) -->
             <div id="cpu-difficulty-section" class="hidden">
                 <div class="section-label">CPU Difficulty</div>
                 <div class="segmented-control">
@@ -401,35 +774,32 @@
                 </div>
             </div>
 
-            <!-- PvP Player Count Selector (Shown only in PvP Mode: 2 to 4 Players) -->
             <div id="pvp-count-section">
                 <div class="section-label">Number of Players (PvP)</div>
                 <div class="segmented-control">
-                    <button type="button" class="seg-btn pvp-count-btn active" data-count="2" onclick="setPvpCount(2)">2 Players</button>
-                    <button type="button" class="seg-btn pvp-count-btn" data-count="3" onclick="setPvpCount(3)">3 Players</button>
-                    <button type="button" class="seg-btn pvp-count-btn" data-count="4" onclick="setPvpCount(4)">4 Players</button>
+                    <button type="button" class="seg-btn pvp-count-btn active" data-count="2" onclick="setPvpCount(2)">2P</button>
+                    <button type="button" class="seg-btn pvp-count-btn" data-count="3" onclick="setPvpCount(3)">3P</button>
+                    <button type="button" class="seg-btn pvp-count-btn" data-count="4" onclick="setPvpCount(4)">4P</button>
                 </div>
             </div>
 
-            <!-- Player Letter Inputs -->
-            <div class="input-group">
-                <label id="p1-label" for="p1-letter">Player 1 Letter:</label>
-                <input type="text" id="p1-letter" maxlength="1" value="A">
-            </div>
-
-            <div class="input-group">
-                <label id="p2-label" for="p2-letter">Player 2 Letter:</label>
-                <input type="text" id="p2-letter" maxlength="1" value="B">
-            </div>
-
-            <div id="p3-group" class="input-group hidden">
-                <label for="p3-letter">Player 3 Letter:</label>
-                <input type="text" id="p3-letter" maxlength="1" value="D">
-            </div>
-
-            <div id="p4-group" class="input-group hidden">
-                <label for="p4-letter">Player 4 Letter:</label>
-                <input type="text" id="p4-letter" maxlength="1" value="E">
+            <div class="inputs-grid">
+                <div class="input-group">
+                    <label id="p1-label" for="p1-letter">Player 1</label>
+                    <input type="text" id="p1-letter" maxlength="1" value="A">
+                </div>
+                <div class="input-group">
+                    <label id="p2-label" for="p2-letter">Player 2</label>
+                    <input type="text" id="p2-letter" maxlength="1" value="B">
+                </div>
+                <div id="p3-group" class="input-group hidden">
+                    <label for="p3-letter">Player 3</label>
+                    <input type="text" id="p3-letter" maxlength="1" value="D">
+                </div>
+                <div id="p4-group" class="input-group hidden">
+                    <label for="p4-letter">Player 4</label>
+                    <input type="text" id="p4-letter" maxlength="1" value="E">
+                </div>
             </div>
 
             <div id="setup-error" class="error-text"></div>
@@ -437,75 +807,326 @@
             <button type="button" class="primary-btn" onclick="startGame()">Start Game</button>
         </div>
 
-        <!-- 2. Active Game UI -->
+        <!-- 2. Active Game Screen -->
         <div id="game-screen" class="game-screen">
-            <div id="scoreboard-header" class="header"></div>
-
-            <div class="status-bar">
-                <div id="turn-status-indicator">Player 1's Turn</div>
-                <div class="zoom-controls">
-                    <button type="button" class="zoom-btn" onclick="adjustZoom(-0.1)">Zoom -</button>
-                    <button type="button" class="zoom-btn" onclick="resetZoom()">Fit</button>
-                    <button type="button" class="zoom-btn" onclick="adjustZoom(0.1)">Zoom +</button>
+            <div class="top-hud">
+                <div id="scoreboard-header" class="header"></div>
+                <div class="status-strip">
+                    <div id="turn-status-indicator">Player 1's Turn</div>
+                    <div id="winner-display"></div>
                 </div>
             </div>
 
-            <div id="winner-display"></div>
-
-            <div class="board-viewport">
+            <!-- Auto-Scaled Stage keeping the entire 5x9 board 100% visible with zero scrolling -->
+            <div id="board-scale-stage">
                 <div id="board"></div>
             </div>
 
-            <div class="footer-actions">
-                <button type="button" class="secondary-btn" onclick="restartCurrentMatch()">Restart Match</button>
-                <button type="button" class="secondary-btn" onclick="returnToSetup()">Change Mode / Setup</button>
-            </div>
+            <!-- Persistent Footer with Session Win/Loss Stats & Quick Controls -->
+            <footer class="game-footer">
+                <div id="session-stats-footer" class="stats-footer-panel">
+                    <div class="stats-title">
+                        <span>📊 Session Stats</span>
+                    </div>
+                    <div id="stats-tallies-container" class="stats-tallies-list"></div>
+                </div>
+
+                <div class="footer-actions">
+                    <button type="button" class="secondary-btn" onclick="restartCurrentMatch()">Restart Match</button>
+                    <button type="button" class="secondary-btn" onclick="toggleThemeQuick()">Theme: <span id="quick-theme-label">Classic Dark</span></button>
+                    <button type="button" class="secondary-btn" onclick="toggleSoundQuick()">SFX: <span id="quick-sound-label">On</span></button>
+                    <button type="button" class="secondary-btn" onclick="returnToSetup()">Settings / Setup</button>
+                </div>
+            </footer>
         </div>
     </div>
 
     <script>
         const DOT_ROWS = 5;
         const DOT_COLS = 9;
-        const BOX_ROWS = 4; // DOT_ROWS - 1
-        const BOX_COLS = 8; // DOT_COLS - 1
-        const TOTAL_BOXES = BOX_ROWS * BOX_COLS; // 32
+        const BOX_ROWS = 4;
+        const BOX_COLS = 8;
+        const TOTAL_BOXES = 32;
 
-        const PLAYER_PALETTE = [
-            { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.22)' },
-            { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.22)' },
-            { color: '#10b981', bg: 'rgba(16, 185, 129, 0.22)' },
-            { color: '#a855f7', bg: 'rgba(168, 85, 247, 0.22)' }
-        ];
+        // Unscaled intrinsic dimensions of #board (8*50 + 9*12 = 508px, 4*50 + 5*12 = 260px)
+        const BOARD_BASE_WIDTH = 508;
+        const BOARD_BASE_HEIGHT = 260;
 
-        const mainContainer = document.getElementById('main-container');
+        const appWrapper = document.getElementById('app-wrapper');
         const setupScreen = document.getElementById('setup-screen');
         const gameScreen = document.getElementById('game-screen');
+        const boardStage = document.getElementById('board-scale-stage');
         const board = document.getElementById('board');
         const scoreboardHeader = document.getElementById('scoreboard-header');
         const turnStatusIndicator = document.getElementById('turn-status-indicator');
         const winnerDisplay = document.getElementById('winner-display');
         const setupError = document.getElementById('setup-error');
+        const comboOverlay = document.getElementById('combo-burst-overlay');
+        const comboMainText = document.getElementById('combo-main-text');
+        const comboSubText = document.getElementById('combo-sub-text');
+        const statsTalliesContainer = document.getElementById('stats-tallies-container');
+        const particleCanvas = document.getElementById('particle-canvas');
+        const pCtx = particleCanvas.getContext('2d');
 
-        let gameMode = 'PVP';          // 'PVP' or 'CPU'
-        let cpuDifficulty = 'MEDIUM';  // 'EASY', 'MEDIUM', or 'HARD'
-        let pvpPlayerCount = 2;        // 2, 3, or 4
+        let currentTheme = 'classic-dark';
+        let soundEnabled = true;
+        let gameMode = 'PVP';
+        let cpuDifficulty = 'MEDIUM';
+        let pvpPlayerCount = 2;
 
         let players = [];
         let currentPlayer = 0;
         let capturedBoxes = 0;
+        let comboCounter = 0;
         let isCpuTurnActive = false;
         let cpuTimeoutId = null;
-        let currentComboCount = 0;
-        let currentComboBoxEls = [];
-        let boardZoom = 1;
 
-        // 2D State Arrays for O(1) adjacent-box evaluation & AI heuristics
-        let hLines = [];       // 5x8 boolean/number matrix for horizontal lines
-        let vLines = [];       // 4x9 boolean/number matrix for vertical lines
-        let hLineEls = [];     // 5x8 DOM element matrix
-        let vLineEls = [];     // 4x9 DOM element matrix
-        let boxesState = [];   // 4x8 matrix tracking how many sides (0..4) surround each box
-        let boxOwners = [];    // 4x8 matrix tracking owner index (-1 if unclaimed)
+        // Persistent session stats across matches in the current session
+        // Keyed by player slot index (0..3) -> { wins: 0, losses: 0, ties: 0 }
+        const sessionStats = {
+            0: { wins: 0, losses: 0, ties: 0 },
+            1: { wins: 0, losses: 0, ties: 0 },
+            2: { wins: 0, losses: 0, ties: 0 },
+            3: { wins: 0, losses: 0, ties: 0 }
+        };
+
+        let hLines = [];
+        let vLines = [];
+        let hLineEls = [];
+        let vLineEls = [];
+        let boxesState = [];
+        let boxOwners = [];
+        let particles = [];
+        let animFrameId = null;
+
+        /**
+         * =========================================================================
+         * 1. WEB AUDIO API SOUND ENGINE
+         * Synthesizes:
+         * - `playLineClick()`: Subtle crisp click when a line is drawn
+         * - `playBoxPop(combo)`: Harmonic pitch-ascending 'pop' when a box is captured
+         * - `playGameEndFanfare()`: Celebratory chord arpeggio when the match ends
+         * =========================================================================
+         */
+        const SoundEngine = (() => {
+            let audioCtx = null;
+
+            function getContext() {
+                if (!soundEnabled) return null;
+                if (!audioCtx) {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContextClass) {
+                        audioCtx = new AudioContextClass();
+                    }
+                }
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume().catch(() => {});
+                }
+                return audioCtx;
+            }
+
+            function playLineClick() {
+                const ctx = getContext();
+                if (!ctx) return;
+                const now = ctx.currentTime;
+
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(540, now);
+                osc.frequency.exponentialRampToValueAtTime(170, now + 0.038);
+
+                gain.gain.setValueAtTime(0.14, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.038);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.04);
+            }
+
+            function playBoxPop(combo = 1) {
+                const ctx = getContext();
+                if (!ctx) return;
+                const now = ctx.currentTime;
+
+                const pitchMultiplier = Math.min(1 + (combo - 1) * 0.12, 1.85);
+                const startFreq = 310 * pitchMultiplier;
+                const peakFreq = 660 * pitchMultiplier;
+
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(startFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(peakFreq, now + 0.085);
+
+                gain.gain.setValueAtTime(0.24, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.135);
+            }
+
+            function playGameEndFanfare() {
+                const ctx = getContext();
+                if (!ctx) return;
+                const now = ctx.currentTime;
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+
+                notes.forEach((freq, idx) => {
+                    const start = now + idx * 0.095;
+                    const duration = idx === notes.length - 1 ? 0.36 : 0.16;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, start);
+
+                    gain.gain.setValueAtTime(0.20, start);
+                    gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(start);
+                    osc.stop(start + duration + 0.01);
+                });
+            }
+
+            return { playLineClick, playBoxPop, playGameEndFanfare };
+        })();
+
+        /**
+         * =========================================================================
+         * 2. THEME PICKER ('Classic Dark' & 'High Contrast' Light Theme)
+         * Updates the `data-theme` attribute so all CSS variables update live.
+         * =========================================================================
+         */
+        function getThemePalette() {
+            const styles = getComputedStyle(document.documentElement);
+            return [1, 2, 3, 4].map(idx => ({
+                color: styles.getPropertyValue(`--p${idx}-color`).trim(),
+                neon: styles.getPropertyValue(`--p${idx}-neon`).trim(),
+                glow: styles.getPropertyValue(`--p${idx}-glow`).trim(),
+                bg: styles.getPropertyValue(`--p${idx}-fill`).trim()
+            }));
+        }
+
+        function setTheme(themeName) {
+            currentTheme = themeName;
+            document.documentElement.setAttribute('data-theme', themeName);
+
+            document.getElementById('theme-dark-btn').classList.toggle('active', themeName === 'classic-dark');
+            document.getElementById('theme-hc-btn').classList.toggle('active', themeName === 'high-contrast');
+
+            const quickLabel = document.getElementById('quick-theme-label');
+            if (quickLabel) {
+                quickLabel.textContent = themeName === 'classic-dark' ? 'Classic Dark' : 'High Contrast';
+            }
+
+            // Refresh active player palette colors if a game is currently running
+            if (players.length > 0) {
+                const palette = getThemePalette();
+                players.forEach((p, idx) => {
+                    Object.assign(p, palette[idx]);
+                });
+                refreshBoardThemeColors();
+                renderScoreboard();
+                renderSessionStats();
+                updateUI();
+            }
+        }
+
+        function toggleThemeQuick() {
+            setTheme(currentTheme === 'classic-dark' ? 'high-contrast' : 'classic-dark');
+        }
+
+        function setSoundEnabled(enabled) {
+            soundEnabled = enabled;
+            document.getElementById('sound-on-btn').classList.toggle('active', enabled);
+            document.getElementById('sound-off-btn').classList.toggle('active', !enabled);
+            const quickSoundLabel = document.getElementById('quick-sound-label');
+            if (quickSoundLabel) {
+                quickSoundLabel.textContent = enabled ? 'On' : 'Muted';
+            }
+            if (enabled) {
+                SoundEngine.playLineClick();
+            }
+        }
+
+        function toggleSoundQuick() {
+            setSoundEnabled(!soundEnabled);
+        }
+
+        function refreshBoardThemeColors() {
+            for (let r = 0; r < DOT_ROWS; r++) {
+                for (let c = 0; c < BOX_COLS; c++) {
+                    const el = hLineEls[r]?.[c];
+                    if (el && el.classList.contains('drawn')) {
+                        const ownerIdx = parseInt(el.dataset.owner ?? '0', 10);
+                        const owner = players[ownerIdx] || players[0];
+                        el.style.backgroundColor = owner.color;
+                        el.style.color = owner.color;
+                        el.style.boxShadow = `0 0 14px ${owner.color}, 0 0 24px ${owner.glow}`;
+                    }
+                }
+            }
+            for (let r = 0; r < BOX_ROWS; r++) {
+                for (let c = 0; c < DOT_COLS; c++) {
+                    const el = vLineEls[r]?.[c];
+                    if (el && el.classList.contains('drawn')) {
+                        const ownerIdx = parseInt(el.dataset.owner ?? '0', 10);
+                        const owner = players[ownerIdx] || players[0];
+                        el.style.backgroundColor = owner.color;
+                        el.style.color = owner.color;
+                        el.style.boxShadow = `0 0 14px ${owner.color}, 0 0 24px ${owner.glow}`;
+                    }
+                }
+            }
+            for (let r = 0; r < BOX_ROWS; r++) {
+                for (let c = 0; c < BOX_COLS; c++) {
+                    const ownerIdx = boxOwners[r]?.[c];
+                    if (ownerIdx !== undefined && ownerIdx >= 0) {
+                        const owner = players[ownerIdx];
+                        const boxEl = document.getElementById(`box-${r}-${c}`);
+                        if (boxEl && owner) {
+                            boxEl.style.color = owner.neon;
+                            boxEl.style.background = `radial-gradient(circle, ${owner.bg} 0%, transparent 100%)`;
+                            boxEl.style.boxShadow = `inset 0 0 16px ${owner.glow}, 0 0 12px ${owner.glow}`;
+                            const charSpan = boxEl.querySelector('.box-char');
+                            if (charSpan) charSpan.style.color = owner.neon;
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * =========================================================================
+         * 3. RESPONSIVE AUTO-SCALE FACTOR CHECK LOGIC ("ZOOM OUT" SOLUTION)
+         * =========================================================================
+         */
+        function recalculateBoardScale() {
+            particleCanvas.width = appWrapper.clientWidth;
+            particleCanvas.height = appWrapper.clientHeight;
+
+            if (gameScreen.style.display === 'none' || gameScreen.classList.contains('hidden')) {
+                return;
+            }
+            const stageWidth = boardStage.clientWidth * 0.92;
+            const stageHeight = boardStage.clientHeight * 0.92;
+            if (stageWidth <= 0 || stageHeight <= 0) return;
+
+            const scaleX = stageWidth / BOARD_BASE_WIDTH;
+            const scaleY = stageHeight / BOARD_BASE_HEIGHT;
+            const optimalScale = Math.max(0.42, Math.min(scaleX, scaleY, 1.35));
+
+            document.documentElement.style.setProperty('--board-auto-scale', optimalScale.toFixed(3));
+        }
+
+        window.addEventListener('resize', recalculateBoardScale);
+        window.addEventListener('orientationchange', () => setTimeout(recalculateBoardScale, 120));
 
         function setGameMode(mode) {
             gameMode = mode;
@@ -523,14 +1144,13 @@
                 document.getElementById('p3-group').classList.add('hidden');
                 document.getElementById('p4-group').classList.add('hidden');
 
-                // Lock Player 2 input to CPU default value 'C'
-                p2Label.textContent = 'CPU Letter (Locked):';
+                p2Label.textContent = 'CPU (Locked)';
                 p2Input.value = 'C';
                 p2Input.disabled = true;
             } else {
                 cpuSection.classList.add('hidden');
                 pvpCountSection.classList.remove('hidden');
-                p2Label.textContent = 'Player 2 Letter:';
+                p2Label.textContent = 'Player 2';
                 p2Input.disabled = false;
                 if (p2Input.value === 'C') p2Input.value = 'B';
                 setPvpCount(pvpPlayerCount);
@@ -558,19 +1178,19 @@
         function startGame() {
             const p1L = document.getElementById('p1-letter').value.trim().toUpperCase();
             let p2L = document.getElementById('p2-letter').value.trim().toUpperCase();
+            const palette = getThemePalette();
 
             if (gameMode === 'CPU') {
                 if (!p1L) {
                     setupError.textContent = 'Please enter a letter for Player 1.';
                     return;
                 }
-                // Ensure CPU has a distinct locked initial
                 p2L = (p1L === 'C') ? '🤖' : 'C';
                 document.getElementById('p2-letter').value = p2L;
 
                 players = [
-                    { name: 'Player 1', letter: p1L, score: 0, isCpu: false, ...PLAYER_PALETTE[0] },
-                    { name: `CPU (${cpuDifficulty})`, letter: p2L, score: 0, isCpu: true, ...PLAYER_PALETTE[1] }
+                    { name: 'Player 1', letter: p1L, score: 0, isCpu: false, ...palette[0] },
+                    { name: `CPU (${cpuDifficulty})`, letter: p2L, score: 0, isCpu: true, ...palette[1] }
                 ];
             } else {
                 const rawLetters = [
@@ -581,7 +1201,7 @@
                 ].slice(0, pvpPlayerCount);
 
                 if (rawLetters.some(l => l.length !== 1)) {
-                    setupError.textContent = 'Every active player must enter a single letter.';
+                    setupError.textContent = 'Every active player must enter 1 character.';
                     return;
                 }
                 if (new Set(rawLetters).size !== rawLetters.length) {
@@ -594,16 +1214,18 @@
                     letter,
                     score: 0,
                     isCpu: false,
-                    ...PLAYER_PALETTE[idx]
+                    ...palette[idx]
                 }));
             }
 
+            SoundEngine.playLineClick();
             setupError.textContent = '';
             setupScreen.classList.add('hidden');
             gameScreen.classList.remove('hidden');
             gameScreen.style.display = 'flex';
 
             initMatchState();
+            requestAnimationFrame(recalculateBoardScale);
         }
 
         function initMatchState() {
@@ -614,17 +1236,19 @@
             players.forEach(p => p.score = 0);
             currentPlayer = 0;
             capturedBoxes = 0;
+            comboCounter = 0;
             isCpuTurnActive = false;
-            currentComboCount = 0;
-            currentComboBoxEls = [];
             winnerDisplay.textContent = '';
 
             buildBoard();
             renderScoreboard();
+            renderSessionStats();
             updateUI();
+            requestAnimationFrame(recalculateBoardScale);
         }
 
         function restartCurrentMatch() {
+            SoundEngine.playLineClick();
             initMatchState();
         }
 
@@ -635,6 +1259,7 @@
             }
             isCpuTurnActive = false;
             gameScreen.classList.add('hidden');
+            gameScreen.style.display = 'none';
             setupScreen.classList.remove('hidden');
         }
 
@@ -649,7 +1274,6 @@
             boxesState = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(0));
             boxOwners = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(-1));
 
-            // 9 CSS Grid rows x 17 CSS Grid columns
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 17; c++) {
                     const el = document.createElement('div');
@@ -689,16 +1313,38 @@
                 const card = document.createElement('div');
                 card.id = `player-card-${idx}`;
                 card.className = 'player-card';
+                card.style.setProperty('--active-color', p.color);
+                card.style.setProperty('--active-glow', p.glow);
                 card.innerHTML = `
-                    <span style="color: ${p.color};">${p.name} (${p.letter})</span>
+                    <span style="color: ${p.neon};">${p.name} (${p.letter})</span>
                     <span id="player-score-${idx}">${p.score}</span>
                 `;
                 scoreboardHeader.appendChild(card);
             });
         }
 
+        /**
+         * =========================================================================
+         * 4. PERSISTENT SESSION STATS FOOTER RENDERING
+         * Displays Wins and Losses across matches within the current session for each player.
+         * =========================================================================
+         */
+        function renderSessionStats() {
+            statsTalliesContainer.innerHTML = '';
+            players.forEach((p, idx) => {
+                const stat = sessionStats[idx] || { wins: 0, losses: 0, ties: 0 };
+                const pill = document.createElement('div');
+                pill.className = 'stat-pill';
+                pill.id = `session-stat-pill-${idx}`;
+                pill.innerHTML = `
+                    <span style="color: ${p.neon};">${p.name} (${p.letter}):</span>
+                    <span>${stat.wins}W - ${stat.losses}L</span>
+                `;
+                statsTalliesContainer.appendChild(pill);
+            });
+        }
+
         function handleHumanLineClick(e) {
-            // Block human clicks during CPU turn or when game is over
             if (isCpuTurnActive || players[currentPlayer].isCpu || capturedBoxes === TOTAL_BOXES) {
                 return;
             }
@@ -712,23 +1358,22 @@
             applyLineMove(type, r, c);
         }
 
-        /**
-         * Core move execution shared by human clicks and `cpuTakeTurn()`.
-         * Updates the 2D state arrays, checks adjacent boxes in O(1), triggers multi-square
-         * combo pulse + zoom when applicable, and schedules the CPU turn loop.
-         */
         function applyLineMove(type, r, c) {
             const lineEl = (type === 'h') ? hLineEls[r][c] : vLineEls[r][c];
             if (!lineEl || lineEl.classList.contains('drawn')) return;
 
-            if (type === 'h') {
-                hLines[r][c] = true;
-            } else {
-                vLines[r][c] = true;
-            }
+            if (type === 'h') hLines[r][c] = true;
+            else vLines[r][c] = true;
 
+            const activeP = players[currentPlayer];
             lineEl.classList.add('drawn');
-            lineEl.style.backgroundColor = players[currentPlayer].color;
+            lineEl.dataset.owner = String(currentPlayer);
+            lineEl.style.backgroundColor = activeP.color;
+            lineEl.style.color = activeP.color;
+            lineEl.style.boxShadow = `0 0 14px ${activeP.color}, 0 0 24px ${activeP.glow}`;
+
+            // Play subtle click when a line is drawn
+            SoundEngine.playLineClick();
 
             let newlyCaptured = 0;
             if (type === 'h') {
@@ -740,13 +1385,19 @@
             }
 
             if (newlyCaptured > 0) {
-                currentComboCount += newlyCaptured;
-                if (currentComboCount >= 2) {
-                    triggerMultiSquareComboPulse();
+                comboCounter += newlyCaptured;
+                // Play harmonic 'pop' sound for capturing a box
+                SoundEngine.playBoxPop(comboCounter);
+                triggerCameraShake();
+
+                if (newlyCaptured === 2 && comboCounter >= 2) {
+                    showComboBurstOverlay(`DOUBLE CAPTURE!`, `COMBO x${comboCounter}!`, activeP.color);
+                } else if (comboCounter >= 2) {
+                    const tierLabel = comboCounter >= 4 ? 'MEGA STREAK!' : 'BONUS TURN!';
+                    showComboBurstOverlay(`COMBO x${comboCounter}!`, tierLabel, activeP.color);
                 }
             } else {
-                currentComboCount = 0;
-                currentComboBoxEls = [];
+                comboCounter = 0;
                 currentPlayer = (currentPlayer + 1) % players.length;
             }
 
@@ -759,12 +1410,11 @@
                 return;
             }
 
-            // If it is now the CPU's turn (or the CPU earned an extra turn), schedule cpuTakeTurn()
             if (players[currentPlayer].isCpu) {
                 isCpuTurnActive = true;
                 board.classList.add('board-locked');
                 updateUI();
-                const naturalDelay = Math.floor(Math.random() * 401) + 600; // 600ms to 1000ms
+                const naturalDelay = Math.floor(Math.random() * 401) + 600;
                 cpuTimeoutId = setTimeout(cpuTakeTurn, naturalDelay);
             } else {
                 isCpuTurnActive = false;
@@ -777,35 +1427,101 @@
             boxesState[r][c]++;
             if (boxesState[r][c] === 4 && boxOwners[r][c] === -1) {
                 boxOwners[r][c] = currentPlayer;
+                const activeP = players[currentPlayer];
                 const boxEl = document.getElementById(`box-${r}-${c}`);
-                boxEl.textContent = players[currentPlayer].letter;
-                boxEl.style.backgroundColor = players[currentPlayer].bg;
-                boxEl.style.color = players[currentPlayer].color;
 
-                players[currentPlayer].score++;
+                boxEl.style.color = activeP.neon;
+                boxEl.style.background = `radial-gradient(circle, ${activeP.bg} 0%, transparent 100%)`;
+                boxEl.style.boxShadow = `inset 0 0 16px ${activeP.glow}, 0 0 12px ${activeP.glow}`;
+                boxEl.classList.remove('captured-box');
+                void boxEl.offsetWidth;
+                boxEl.classList.add('captured-box');
+
+                boxEl.innerHTML = `<span class="box-char" style="color: ${activeP.neon};">${activeP.letter}</span>`;
+
+                activeP.score++;
                 capturedBoxes++;
-                currentComboBoxEls.push(boxEl);
+
+                spawnBoxParticles(boxEl, activeP.neon);
                 return true;
             }
             return false;
         }
 
-        function triggerMultiSquareComboPulse() {
-            mainContainer.classList.remove('combo-zoom');
-            void mainContainer.offsetWidth;
-            mainContainer.classList.add('combo-zoom');
+        function triggerCameraShake() {
+            appWrapper.classList.remove('rumble-active');
+            void appWrapper.offsetWidth;
+            appWrapper.classList.add('rumble-active');
+        }
 
-            currentComboBoxEls.forEach(boxEl => {
-                boxEl.classList.remove('combo-pulse');
-                void boxEl.offsetWidth;
-                boxEl.classList.add('combo-pulse');
-            });
+        function showComboBurstOverlay(mainTitle, subTitle, glowColor) {
+            comboOverlay.style.setProperty('--burst-color', glowColor);
+            comboMainText.textContent = mainTitle;
+            comboSubText.textContent = subTitle;
+
+            comboOverlay.classList.remove('burst-active');
+            void comboOverlay.offsetWidth;
+            comboOverlay.classList.add('burst-active');
+        }
+
+        function spawnBoxParticles(boxEl, colorHex) {
+            const wrapperRect = appWrapper.getBoundingClientRect();
+            const boxRect = boxEl.getBoundingClientRect();
+            const cx = boxRect.left - wrapperRect.left + boxRect.width / 2;
+            const cy = boxRect.top - wrapperRect.top + boxRect.height / 2;
+
+            const count = comboCounter >= 2 ? 28 : 16;
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+                const speed = 2.2 + Math.random() * (comboCounter >= 2 ? 5.5 : 3.5);
+                particles.push({
+                    x: cx,
+                    y: cy,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 2.5 + Math.random() * 3.5,
+                    alpha: 1,
+                    color: colorHex
+                });
+            }
+
+            if (!animFrameId) {
+                animFrameId = requestAnimationFrame(stepParticles);
+            }
+        }
+
+        function stepParticles() {
+            pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+            particles = particles.filter(p => p.alpha > 0.03);
+
+            for (const p of particles) {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.08;
+                p.alpha *= 0.92;
+
+                pCtx.save();
+                pCtx.globalAlpha = p.alpha;
+                pCtx.fillStyle = p.color;
+                pCtx.shadowColor = p.color;
+                pCtx.shadowBlur = 10;
+                pCtx.beginPath();
+                pCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                pCtx.fill();
+                pCtx.restore();
+            }
+
+            if (particles.length > 0) {
+                animFrameId = requestAnimationFrame(stepParticles);
+            } else {
+                animFrameId = null;
+            }
         }
 
         /**
-         * Isolated CPU AI Turn Controller (`cpuTakeTurn()`):
-         * Evaluates the 2D board arrays (`hLines`, `vLines`, `boxesState`) according to
-         * the selected difficulty tier (EASY, MEDIUM, or HARD) and executes the chosen move.
+         * =========================================================================
+         * 5. ISOLATED CPU AI TURN CONTROLLER (`cpuTakeTurn`)
+         * =========================================================================
          */
         function cpuTakeTurn() {
             if (capturedBoxes === TOTAL_BOXES || !players[currentPlayer].isCpu) return;
@@ -854,27 +1570,14 @@
             return adj;
         }
 
-        /**
-         * EASY (Naive):
-         * 1. Completes any 4th side immediately if available.
-         * 2. Otherwise picks randomly from all unselected lines.
-         */
         function chooseEasyMove(availableMoves) {
             const scoringMoves = availableMoves.filter(m =>
                 getAdjacentBoxCoords(m).some(b => boxesState[b.r][b.c] === 3)
             );
-            if (scoringMoves.length > 0) {
-                return scoringMoves[Math.floor(Math.random() * scoringMoves.length)];
-            }
-            return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+            if (scoringMoves.length > 0) return randomChoice(scoringMoves);
+            return randomChoice(availableMoves);
         }
 
-        /**
-         * MEDIUM (Careful):
-         * 1. Prioritizes completing a 4th side (preferring double-box captures first).
-         * 2. Actively avoids moves that complete a 3rd side (where an adjacent box currently has 2 sides).
-         * 3. If forced to complete a 3rd side, picks randomly among moves that expose the fewest 3rd sides.
-         */
         function chooseMediumMove(availableMoves) {
             const doubleCaptures = [];
             const singleCaptures = [];
@@ -887,17 +1590,11 @@
                 const completable = adj.filter(b => boxesState[b.r][b.c] === 3).length;
                 const thirdSidesCreated = adj.filter(b => boxesState[b.r][b.c] === 2).length;
 
-                if (completable === 2) {
-                    doubleCaptures.push(move);
-                } else if (completable === 1) {
-                    singleCaptures.push(move);
-                } else if (thirdSidesCreated === 0) {
-                    safeMoves.push(move);
-                } else if (thirdSidesCreated === 1) {
-                    riskySingleBoxMoves.push(move);
-                } else {
-                    riskyDoubleBoxMoves.push(move);
-                }
+                if (completable === 2) doubleCaptures.push(move);
+                else if (completable === 1) singleCaptures.push(move);
+                else if (thirdSidesCreated === 0) safeMoves.push(move);
+                else if (thirdSidesCreated === 1) riskySingleBoxMoves.push(move);
+                else riskyDoubleBoxMoves.push(move);
             }
 
             if (doubleCaptures.length > 0) return randomChoice(doubleCaptures);
@@ -907,16 +1604,6 @@
             return randomChoice(riskyDoubleBoxMoves);
         }
 
-        /**
-         * HARD (Competitive Strategy):
-         * 1. If scoring moves exist, prefers moves that capture 2 boxes simultaneously or unlock
-         *    consecutive scoring cascades (where the other adjacent box has 2 sides, continuing the sweep!).
-         * 2. Actively avoids setting up 3rd sides; among safe moves, prefers moves adjacent to 0-sided
-         *    boxes to preserve future safe options.
-         * 3. If forced to give away a box (every remaining move creates a 3rd side), simulates the
-         *    opponent's consecutive chain capture on a cloned 2D board for each candidate move and picks
-         *    the move that gives away the SHORTEST chain of boxes (minimizing damage).
-         */
         function chooseHardMove(availableMoves) {
             const scoringMoves = [];
             const safeMoves = [];
@@ -928,11 +1615,9 @@
                 const createsThird = adj.filter(b => boxesState[b.r][b.c] === 2).length;
 
                 if (completable > 0) {
-                    // Score priority: double capture (20) > cascade unlock (15) > single capture (10)
                     const unlocksCascade = adj.some(b => boxesState[b.r][b.c] === 2) ? 5 : 0;
                     scoringMoves.push({ move, priority: completable * 10 + unlocksCascade });
                 } else if (createsThird === 0) {
-                    // Prefer edges bordering boxes with 0 sides over 1 side to delay 2-side saturation
                     const totalExistingSides = adj.reduce((acc, b) => acc + boxesState[b.r][b.c], 0);
                     safeMoves.push({ move, score: -totalExistingSides });
                 } else {
@@ -943,18 +1628,15 @@
             if (scoringMoves.length > 0) {
                 scoringMoves.sort((a, b) => b.priority - a.priority);
                 const bestPriority = scoringMoves[0].priority;
-                const topScoring = scoringMoves.filter(m => m.priority === bestPriority).map(m => m.move);
-                return randomChoice(topScoring);
+                return randomChoice(scoringMoves.filter(m => m.priority === bestPriority).map(m => m.move));
             }
 
             if (safeMoves.length > 0) {
                 safeMoves.sort((a, b) => b.score - a.score);
                 const bestSafeScore = safeMoves[0].score;
-                const topSafe = safeMoves.filter(m => m.score === bestSafeScore).map(m => m.move);
-                return randomChoice(topSafe);
+                return randomChoice(safeMoves.filter(m => m.score === bestSafeScore).map(m => m.move));
             }
 
-            // Forced sacrifice: simulate opponent chain length for each risky move and minimize damage
             let minChainSacrifice = Infinity;
             let bestSacrificeMoves = [];
 
@@ -971,10 +1653,6 @@
             return randomChoice(bestSacrificeMoves);
         }
 
-        /**
-         * Clones the 2D board state, applies `candidateMove`, and counts how many consecutive
-         * boxes the opponent can immediately sweep in the resulting chain.
-         */
         function simulateOpponentChainLength(candidateMove) {
             const simH = hLines.map(row => [...row]);
             const simV = vLines.map(row => [...row]);
@@ -1002,7 +1680,6 @@
                 for (let r = 0; r < BOX_ROWS; r++) {
                     for (let c = 0; c < BOX_COLS; c++) {
                         if (simBoxes[r][c] === 3) {
-                            // Find the 4th unclaimed side of box (r, c)
                             let fourthMove = null;
                             if (!simH[r][c]) fourthMove = { type: 'h', r, c };
                             else if (!simH[r + 1][c]) fourthMove = { type: 'h', r: r + 1, c };
@@ -1030,49 +1707,57 @@
                 const cardEl = document.getElementById(`player-card-${idx}`);
                 if (scoreEl) scoreEl.textContent = p.score;
                 if (cardEl) {
-                    cardEl.classList.toggle(`active-p${idx}`, currentPlayer === idx && capturedBoxes < TOTAL_BOXES);
+                    const isTurn = currentPlayer === idx && capturedBoxes < TOTAL_BOXES;
+                    cardEl.classList.toggle('active-turn', isTurn);
+                    cardEl.classList.toggle('combo-heartbeat', isTurn && comboCounter >= 2);
                 }
             });
 
             const activeP = players[currentPlayer];
-            turnStatusIndicator.classList.remove('cpu-thinking', 'combo-active');
+            turnStatusIndicator.classList.remove('cpu-thinking', 'combo-streak');
 
             if (capturedBoxes === TOTAL_BOXES) {
-                turnStatusIndicator.textContent = 'Game Complete';
+                turnStatusIndicator.textContent = 'Match Complete';
             } else if (activeP.isCpu) {
-                turnStatusIndicator.textContent = currentComboCount >= 2
-                    ? `CPU is drawing... (${currentComboCount}x Combo!)`
+                turnStatusIndicator.textContent = comboCounter >= 2
+                    ? `CPU is drawing... (COMBO x${comboCounter}!)`
                     : 'CPU is thinking...';
                 turnStatusIndicator.classList.add('cpu-thinking');
-            } else if (currentComboCount >= 2) {
-                turnStatusIndicator.textContent = `${activeP.name} (${activeP.letter}) — ${currentComboCount}× COMBO EXTRA TURN!`;
-                turnStatusIndicator.classList.add('combo-active');
+            } else if (comboCounter >= 2) {
+                turnStatusIndicator.textContent = `🔥 ${activeP.name} — COMBO x${comboCounter} STREAK!`;
+                turnStatusIndicator.classList.add('combo-streak');
             } else {
                 turnStatusIndicator.textContent = `${activeP.name}'s Turn (${activeP.letter})`;
             }
         }
 
         function declareWinner() {
+            // Play celebratory Web Audio API sound when the game ends
+            SoundEngine.playGameEndFanfare();
+
             const maxScore = Math.max(...players.map(p => p.score));
-            const winners = players.filter(p => p.score === maxScore);
+            const winningIndices = [];
+            players.forEach((p, idx) => {
+                if (p.score === maxScore) winningIndices.push(idx);
+            });
 
-            if (winners.length === 1) {
-                winnerDisplay.textContent = `${winners[0].name} (${winners[0].letter}) Wins with ${winners[0].score} Boxes!`;
-                winnerDisplay.style.color = winners[0].color;
+            if (winningIndices.length === 1) {
+                const winIdx = winningIndices[0];
+                players.forEach((_, idx) => {
+                    if (idx === winIdx) sessionStats[idx].wins++;
+                    else sessionStats[idx].losses++;
+                });
+                winnerDisplay.textContent = `${players[winIdx].name} (${players[winIdx].letter}) Wins!`;
+                winnerDisplay.style.color = players[winIdx].neon;
             } else {
-                winnerDisplay.textContent = `It's a Tie at ${maxScore} Boxes!`;
-                winnerDisplay.style.color = '#f8fafc';
+                players.forEach((_, idx) => {
+                    sessionStats[idx].ties++;
+                });
+                winnerDisplay.textContent = `Tie Game (${maxScore} Boxes)!`;
+                winnerDisplay.style.color = 'var(--text-color)';
             }
-        }
 
-        function adjustZoom(delta) {
-            boardZoom = Math.min(1.35, Math.max(0.65, +(boardZoom + delta).toFixed(2)));
-            document.documentElement.style.setProperty('--board-zoom', boardZoom);
-        }
-
-        function resetZoom() {
-            boardZoom = 1;
-            document.documentElement.style.setProperty('--board-zoom', boardZoom);
+            renderSessionStats();
         }
     </script>
 </body>

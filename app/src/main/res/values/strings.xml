@@ -2,7 +2,15 @@
     <string name="app_name">Dots &amp; Boxes</string>
     <string name="setup_title">Dots &amp; Boxes</string>
     <string name="setup_subtitle">5×9 Grid • 32 Tactile Boxes • PvP &amp; CPU AI</string>
-    <string name="setup_card_header">Match Setup</string>
+    <string name="setup_card_header">Match Setup &amp; Settings</string>
+    <string name="theme_picker_label">Theme Picker</string>
+    <string name="theme_classic_dark">Classic Dark</string>
+    <string name="theme_high_contrast">High Contrast</string>
+    <string name="sound_effects_label">Sound Engine</string>
+    <string name="sound_on">SFX On</string>
+    <string name="sound_muted">Muted</string>
+    <string name="session_stats_title">Session Stats</string>
+    <string name="session_stats_tally_format">%1$dW - %2$dL</string>
     <string name="game_mode_label">Game Mode</string>
     <string name="mode_pvp_button">Player vs Player</string>
     <string name="mode_cpu_button">Player vs CPU</string>
@@ -46,5 +54,5 @@
     <string name="close_button">Close</string>
     <string name="copied_toast">Copied index.html to clipboard</string>
     <string name="hero_banner_desc">Neon geometric Dots and Boxes grid banner</string>
-    <string name="rules_summary">Play PvP (2–4 Players) or challenge the CPU across Easy, Medium, and Hard difficulty tiers. Capturing multiple squares in a single round triggers a Combo Pulse and Zoom effect!</string>
+    <string name="rules_summary">Play PvP (2–4 Players) or challenge the CPU across Easy, Medium, and Hard difficulty tiers. Switch themes, hear synthesized audio effects, and track session Win/Loss tallies!</string>
 </resources>

@@ -23,10 +23,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Contrast
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.GridOn
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
@@ -58,30 +62,23 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.CpuDifficulty
 import com.example.model.GameMode
-import com.example.ui.theme.DotWhite
+import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.JetBrainsMonoFontFamily
-import com.example.ui.theme.MutedText
-import com.example.ui.theme.ObsidianBackground
-import com.example.ui.theme.Player1Cyan
-import com.example.ui.theme.Player1CyanFill
-import com.example.ui.theme.Player2Coral
-import com.example.ui.theme.Player2CoralFill
-import com.example.ui.theme.Player3Emerald
-import com.example.ui.theme.Player3EmeraldFill
-import com.example.ui.theme.Player4Violet
-import com.example.ui.theme.Player4VioletFill
-import com.example.ui.theme.SlateBorder
-import com.example.ui.theme.SlateSurface
-import com.example.ui.theme.SlateSurfaceElevated
-import com.example.ui.theme.StreakAmber
+import com.example.ui.theme.LocalGamePalette
+import com.example.viewmodel.PlayerSessionStats
 
 @Composable
 fun SetupScreen(
+    themeMode: AppThemeMode,
+    soundEnabled: Boolean,
     selectedGameMode: GameMode,
     selectedCpuDifficulty: CpuDifficulty,
     selectedPlayerCount: Int,
     playerInputs: List<String>,
+    sessionStats: Map<Int, PlayerSessionStats>,
     errorResId: Int?,
+    onSelectThemeMode: (AppThemeMode) -> Unit,
+    onSetSoundEnabled: (Boolean) -> Unit,
     onSelectGameMode: (GameMode) -> Unit,
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onSelectPlayerCount: (Int) -> Unit,
@@ -90,6 +87,7 @@ fun SetupScreen(
     onOpenHtmlViewer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalGamePalette.current
     val scrollState = rememberScrollState()
     val isCpuMode = selectedGameMode == GameMode.CPU
 
@@ -99,8 +97,8 @@ fun SetupScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF131F3A),
-                        ObsidianBackground
+                        palette.backgroundRadialTop,
+                        palette.backgroundDeep
                     )
                 )
             ),
@@ -111,17 +109,17 @@ fun SetupScreen(
                 .fillMaxWidth()
                 .widthIn(max = 580.dp)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 18.dp, vertical = 20.dp),
+                .padding(horizontal = 18.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Hero Banner Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, SlateBorder, RoundedCornerShape(24.dp)),
+                    .border(1.dp, palette.border, RoundedCornerShape(24.dp)),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = SlateSurface)
+                colors = CardDefaults.cardColors(containerColor = palette.surface)
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -129,7 +127,7 @@ fun SetupScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(128.dp)
+                            .height(120.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_hero_dots_boxes),
@@ -142,8 +140,8 @@ fun SetupScreen(
                                 .align(Alignment.TopEnd)
                                 .padding(12.dp)
                                 .clip(RoundedCornerShape(50))
-                                .background(ObsidianBackground.copy(alpha = 0.85f))
-                                .border(1.dp, SlateBorder, RoundedCornerShape(50))
+                                .background(palette.backgroundDeep.copy(alpha = 0.88f))
+                                .border(1.dp, palette.border, RoundedCornerShape(50))
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Row(
@@ -153,59 +151,127 @@ fun SetupScreen(
                                 Icon(
                                     imageVector = Icons.Outlined.GridOn,
                                     contentDescription = null,
-                                    tint = Player1Cyan,
+                                    tint = palette.p1Accent,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Text(
                                     text = "5×9 DOTS • PVP & CPU",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = DotWhite
+                                    color = palette.primaryText
                                 )
                             }
                         }
                     }
 
                     Column(
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             text = stringResource(R.string.setup_title),
                             style = MaterialTheme.typography.displayLarge,
-                            color = DotWhite,
+                            color = palette.primaryText,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = stringResource(R.string.setup_subtitle),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MutedText,
+                            color = palette.mutedText,
                             textAlign = TextAlign.Center
                         )
                     }
                 }
             }
 
-            // Game Mode, CPU Difficulty / PvP Count & Player Initials Card
+            // Settings & Match Setup Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, SlateBorder, RoundedCornerShape(24.dp)),
+                    .border(1.dp, palette.border, RoundedCornerShape(24.dp)),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = SlateSurface)
+                colors = CardDefaults.cardColors(containerColor = palette.surface)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.setup_card_header),
                         style = MaterialTheme.typography.titleLarge,
-                        color = DotWhite
+                        color = palette.primaryText
                     )
 
-                    // 1. Game Mode Segmented Control: Player vs Player (default) or Player vs Computer (CPU)
+                    // Theme Picker ('Classic Dark' vs 'High Contrast') & Sound Engine Toggle
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.theme_picker_label),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.mutedText
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ModeTogglePill(
+                                title = stringResource(R.string.theme_classic_dark),
+                                icon = Icons.Filled.DarkMode,
+                                isSelected = themeMode == AppThemeMode.CLASSIC_DARK,
+                                accentColor = palette.p1Accent,
+                                testTag = "theme_classic_dark_button",
+                                onClick = { onSelectThemeMode(AppThemeMode.CLASSIC_DARK) },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            ModeTogglePill(
+                                title = stringResource(R.string.theme_high_contrast),
+                                icon = Icons.Filled.Contrast,
+                                isSelected = themeMode == AppThemeMode.HIGH_CONTRAST,
+                                accentColor = palette.p2Accent,
+                                testTag = "theme_high_contrast_button",
+                                onClick = { onSelectThemeMode(AppThemeMode.HIGH_CONTRAST) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Text(
+                            text = stringResource(R.string.sound_effects_label),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.mutedText
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ModeTogglePill(
+                                title = stringResource(R.string.sound_on),
+                                icon = Icons.Filled.VolumeUp,
+                                isSelected = soundEnabled,
+                                accentColor = palette.p3Accent,
+                                testTag = "sound_on_button",
+                                onClick = { onSetSoundEnabled(true) },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            ModeTogglePill(
+                                title = stringResource(R.string.sound_muted),
+                                icon = Icons.Filled.VolumeOff,
+                                isSelected = !soundEnabled,
+                                accentColor = palette.p2Accent,
+                                testTag = "sound_mute_button",
+                                onClick = { onSetSoundEnabled(false) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // 1. Game Mode Segmented Control: Player vs Player or Player vs Computer (CPU)
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -214,7 +280,7 @@ fun SetupScreen(
                         Text(
                             text = stringResource(R.string.game_mode_label),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MutedText
+                            color = palette.mutedText
                         )
 
                         Row(
@@ -225,7 +291,7 @@ fun SetupScreen(
                                 title = stringResource(R.string.mode_pvp_button),
                                 icon = Icons.Filled.Group,
                                 isSelected = !isCpuMode,
-                                accentColor = Player1Cyan,
+                                accentColor = palette.p1Accent,
                                 testTag = "mode_pvp_button",
                                 onClick = { onSelectGameMode(GameMode.PVP) },
                                 modifier = Modifier.weight(1f)
@@ -235,7 +301,7 @@ fun SetupScreen(
                                 title = stringResource(R.string.mode_cpu_button),
                                 icon = Icons.Filled.SmartToy,
                                 isSelected = isCpuMode,
-                                accentColor = Player2Coral,
+                                accentColor = palette.p2Accent,
                                 testTag = "mode_cpu_button",
                                 onClick = { onSelectGameMode(GameMode.CPU) },
                                 modifier = Modifier.weight(1f)
@@ -243,7 +309,7 @@ fun SetupScreen(
                         }
                     }
 
-                    // 2A. CPU Difficulty Segmented Control (Shown when Player vs Computer is selected)
+                    // 2A. CPU Difficulty Segmented Control
                     AnimatedVisibility(visible = isCpuMode) {
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -253,7 +319,7 @@ fun SetupScreen(
                             Text(
                                 text = stringResource(R.string.cpu_difficulty_label),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MutedText
+                                color = palette.mutedText
                             )
 
                             Row(
@@ -263,9 +329,9 @@ fun SetupScreen(
                                 CpuDifficulty.entries.forEach { diff ->
                                     val isSelected = selectedCpuDifficulty == diff
                                     val diffAccent = when (diff) {
-                                        CpuDifficulty.EASY -> Player3Emerald
-                                        CpuDifficulty.MEDIUM -> StreakAmber
-                                        CpuDifficulty.HARD -> Player2Coral
+                                        CpuDifficulty.EASY -> palette.p3Accent
+                                        CpuDifficulty.MEDIUM -> palette.streakAccent
+                                        CpuDifficulty.HARD -> palette.p2Accent
                                     }
                                     val diffLabel = when (diff) {
                                         CpuDifficulty.EASY -> stringResource(R.string.diff_easy)
@@ -278,11 +344,11 @@ fun SetupScreen(
                                             .height(48.dp)
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(
-                                                if (isSelected) diffAccent else SlateSurfaceElevated
+                                                if (isSelected) diffAccent else palette.surfaceElevated
                                             )
                                             .border(
                                                 width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) diffAccent else SlateBorder,
+                                                color = if (isSelected) diffAccent else palette.border,
                                                 shape = RoundedCornerShape(14.dp)
                                             )
                                             .clickable { onSelectCpuDifficulty(diff) }
@@ -292,7 +358,7 @@ fun SetupScreen(
                                         Text(
                                             text = diffLabel,
                                             style = MaterialTheme.typography.labelLarge,
-                                            color = if (isSelected) ObsidianBackground else DotWhite
+                                            color = if (isSelected) Color.White else palette.primaryText
                                         )
                                     }
                                 }
@@ -306,13 +372,13 @@ fun SetupScreen(
                             Text(
                                 text = diffDescription,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MutedText,
+                                color = palette.mutedText,
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
 
-                    // 2B. PvP Player Count Selector (2, 3, or 4 Players when PvP Mode is selected)
+                    // 2B. PvP Player Count Selector
                     AnimatedVisibility(visible = !isCpuMode) {
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -322,7 +388,7 @@ fun SetupScreen(
                             Text(
                                 text = stringResource(R.string.player_count_label),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MutedText
+                                color = palette.mutedText
                             )
 
                             Row(
@@ -332,9 +398,9 @@ fun SetupScreen(
                                 for (count in 2..4) {
                                     val isSelected = selectedPlayerCount == count
                                     val pillAccent = when (count) {
-                                        2 -> Player1Cyan
-                                        3 -> Player3Emerald
-                                        else -> Player4Violet
+                                        2 -> palette.p1Accent
+                                        3 -> palette.p3Accent
+                                        else -> palette.p4Accent
                                     }
                                     Box(
                                         modifier = Modifier
@@ -342,11 +408,11 @@ fun SetupScreen(
                                             .height(48.dp)
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(
-                                                if (isSelected) pillAccent else SlateSurfaceElevated
+                                                if (isSelected) pillAccent else palette.surfaceElevated
                                             )
                                             .border(
                                                 width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) pillAccent else SlateBorder,
+                                                color = if (isSelected) pillAccent else palette.border,
                                                 shape = RoundedCornerShape(14.dp)
                                             )
                                             .clickable { onSelectPlayerCount(count) }
@@ -356,7 +422,7 @@ fun SetupScreen(
                                         Text(
                                             text = "$count Players",
                                             style = MaterialTheme.typography.labelLarge,
-                                            color = if (isSelected) ObsidianBackground else DotWhite
+                                            color = if (isSelected) Color.White else palette.primaryText
                                         )
                                     }
                                 }
@@ -373,8 +439,8 @@ fun SetupScreen(
                             label = stringResource(R.string.player_one_label),
                             value = playerInputs.getOrElse(0) { "A" },
                             isLocked = false,
-                            accentColor = Player1Cyan,
-                            accentFill = Player1CyanFill,
+                            accentColor = palette.p1Accent,
+                            accentFill = palette.p1Fill,
                             quickOptions = listOf("A", "X", "1", "P"),
                             testTag = "player1_letter_input",
                             onValueChange = { onPlayerInputChange(0, it) },
@@ -389,8 +455,8 @@ fun SetupScreen(
                             },
                             value = playerInputs.getOrElse(1) { if (isCpuMode) "C" else "B" },
                             isLocked = isCpuMode,
-                            accentColor = Player2Coral,
-                            accentFill = Player2CoralFill,
+                            accentColor = palette.p2Accent,
+                            accentFill = palette.p2Fill,
                             quickOptions = if (isCpuMode) emptyList() else listOf("B", "O", "2", "Z"),
                             testTag = "player2_letter_input",
                             onValueChange = { onPlayerInputChange(1, it) },
@@ -408,8 +474,8 @@ fun SetupScreen(
                                 label = stringResource(R.string.player_three_label),
                                 value = playerInputs.getOrElse(2) { "D" },
                                 isLocked = false,
-                                accentColor = Player3Emerald,
-                                accentFill = Player3EmeraldFill,
+                                accentColor = palette.p3Accent,
+                                accentFill = palette.p3Fill,
                                 quickOptions = listOf("D", "M", "3", "E"),
                                 testTag = "player3_letter_input",
                                 onValueChange = { onPlayerInputChange(2, it) },
@@ -421,8 +487,8 @@ fun SetupScreen(
                                     label = stringResource(R.string.player_four_label),
                                     value = playerInputs.getOrElse(3) { "E" },
                                     isLocked = false,
-                                    accentColor = Player4Violet,
-                                    accentFill = Player4VioletFill,
+                                    accentColor = palette.p4Accent,
+                                    accentFill = palette.p4Fill,
                                     quickOptions = listOf("E", "W", "4", "V"),
                                     testTag = "player4_letter_input",
                                     onValueChange = { onPlayerInputChange(3, it) },
@@ -456,8 +522,8 @@ fun SetupScreen(
                             .testTag("start_game_button"),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Player1Cyan,
-                            contentColor = ObsidianBackground
+                            containerColor = palette.p1Accent,
+                            contentColor = Color.White
                         )
                     ) {
                         Icon(
@@ -476,18 +542,48 @@ fun SetupScreen(
                 }
             }
 
-            // Rules & Standalone Web HTML Card
+            // Persistent Session Stats & Standalone Web HTML Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, SlateBorder, RoundedCornerShape(20.dp)),
+                    .border(1.dp, palette.border, RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = SlateSurface.copy(alpha = 0.85f))
+                colors = CardDefaults.cardColors(containerColor = palette.surface)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
+                    modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val activeCount = if (isCpuMode) 2 else selectedPlayerCount
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.session_stats_title).uppercase(),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = palette.mutedText
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (pNum in 1..activeCount) {
+                                val stat = sessionStats[pNum] ?: PlayerSessionStats()
+                                val label = if (isCpuMode && pNum == 2) "CPU" else "P$pNum"
+                                Text(
+                                    text = "$label: ${stat.wins}W-${stat.losses}L",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = palette.primaryText
+                                )
+                            }
+                        }
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -495,13 +591,13 @@ fun SetupScreen(
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = null,
-                            tint = Player1Cyan,
+                            tint = palette.p1Accent,
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
                             text = stringResource(R.string.rules_summary),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MutedText
+                            color = palette.mutedText
                         )
                     }
 
@@ -512,12 +608,12 @@ fun SetupScreen(
                             .height(48.dp)
                             .testTag("open_html_viewer_button"),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = DotWhite)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primaryText)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Code,
                             contentDescription = null,
-                            tint = Player2Coral,
+                            tint = palette.p2Accent,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.size(8.dp))
@@ -542,14 +638,15 @@ private fun ModeTogglePill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalGamePalette.current
     Box(
         modifier = modifier
-            .height(50.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) accentColor else SlateSurfaceElevated)
+            .background(if (isSelected) accentColor else palette.surfaceElevated)
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) accentColor else SlateBorder,
+                color = if (isSelected) accentColor else palette.border,
                 shape = RoundedCornerShape(14.dp)
             )
             .clickable(onClick = onClick)
@@ -563,13 +660,13 @@ private fun ModeTogglePill(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) ObsidianBackground else accentColor,
-                modifier = Modifier.size(18.dp)
+                tint = if (isSelected) Color.White else accentColor,
+                modifier = Modifier.size(17.dp)
             )
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (isSelected) ObsidianBackground else DotWhite
+                color = if (isSelected) Color.White else palette.primaryText
             )
         }
     }
@@ -587,10 +684,11 @@ private fun PlayerInitialInputCard(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalGamePalette.current
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(SlateSurfaceElevated)
+            .background(palette.surfaceElevated)
             .border(1.5.dp, accentColor.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -627,7 +725,7 @@ private fun PlayerInitialInputCard(
                 fontWeight = FontWeight.Bold,
                 fontSize = 26.sp,
                 textAlign = TextAlign.Center,
-                color = if (isLocked) accentColor else DotWhite
+                color = if (isLocked) accentColor else palette.primaryText
             ),
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Characters,
@@ -635,10 +733,10 @@ private fun PlayerInitialInputCard(
             ),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = accentColor,
-                unfocusedBorderColor = SlateBorder,
+                unfocusedBorderColor = palette.border,
                 disabledBorderColor = accentColor.copy(alpha = 0.7f),
                 focusedContainerColor = accentFill,
-                unfocusedContainerColor = ObsidianBackground,
+                unfocusedContainerColor = palette.backgroundDeep,
                 disabledContainerColor = accentFill,
                 disabledTextColor = accentColor,
                 cursorColor = accentColor
@@ -660,8 +758,8 @@ private fun PlayerInitialInputCard(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(if (isSelected) accentColor else ObsidianBackground)
-                            .border(1.dp, if (isSelected) accentColor else SlateBorder, CircleShape)
+                            .background(if (isSelected) accentColor else palette.backgroundDeep)
+                            .border(1.dp, if (isSelected) accentColor else palette.border, CircleShape)
                             .clickable { onValueChange(preset) },
                         contentAlignment = Alignment.Center
                     ) {
@@ -670,7 +768,7 @@ private fun PlayerInitialInputCard(
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold
                             ),
-                            color = if (isSelected) ObsidianBackground else MutedText
+                            color = if (isSelected) Color.White else palette.mutedText
                         )
                     }
                 }

@@ -2,11 +2,14 @@ package com.example.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.audio.SoundEngine
 import com.example.model.BoardState
 import com.example.model.CpuDifficulty
 import com.example.model.DotsAndBoxesEngine
 import com.example.model.EdgeCoordinate
 import com.example.model.GameMode
+import com.example.model.MoveOutcome
+import com.example.ui.theme.AppThemeMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,14 +24,28 @@ enum class ScreenDestination {
     GAME
 }
 
+data class PlayerSessionStats(
+    val wins: Int = 0,
+    val losses: Int = 0,
+    val ties: Int = 0
+)
+
 data class GameUiState(
     val currentScreen: ScreenDestination = ScreenDestination.SETUP,
+    val themeMode: AppThemeMode = AppThemeMode.CLASSIC_DARK,
+    val soundEnabled: Boolean = true,
     val selectedGameMode: GameMode = GameMode.PVP, // Default: Player vs Player
     val selectedCpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
     val selectedPlayerCount: Int = 2, // 1 = CPU Mode, 2..4 = PvP Mode
     val playerInputs: List<String> = listOf("A", "B", "D", "E"),
     val setupErrorResId: Int? = null,
     val boardState: BoardState = BoardState.create(2, listOf("A", "B")),
+    val sessionStats: Map<Int, PlayerSessionStats> = mapOf(
+        1 to PlayerSessionStats(),
+        2 to PlayerSessionStats(),
+        3 to PlayerSessionStats(),
+        4 to PlayerSessionStats()
+    ),
     val hoveredEdge: EdgeCoordinate? = null,
     val boardZoom: Float = 0.92f,
     val showHtmlDialog: Boolean = false
@@ -40,6 +57,33 @@ class GameViewModel : ViewModel() {
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
 
     private var aiTurnJob: Job? = null
+
+    fun selectThemeMode(mode: AppThemeMode) {
+        _uiState.update { it.copy(themeMode = mode) }
+    }
+
+    fun toggleThemeMode() {
+        _uiState.update { state ->
+            val next = if (state.themeMode == AppThemeMode.CLASSIC_DARK) {
+                AppThemeMode.HIGH_CONTRAST
+            } else {
+                AppThemeMode.CLASSIC_DARK
+            }
+            state.copy(themeMode = next)
+        }
+    }
+
+    fun setSoundEnabled(enabled: Boolean) {
+        SoundEngine.isSoundEnabled = enabled
+        _uiState.update { it.copy(soundEnabled = enabled) }
+        if (enabled) {
+            SoundEngine.playLineClick()
+        }
+    }
+
+    fun toggleSound() {
+        setSoundEnabled(!_uiState.value.soundEnabled)
+    }
 
     fun selectGameMode(mode: GameMode) {
         _uiState.update { state ->
@@ -90,7 +134,6 @@ class GameViewModel : ViewModel() {
 
     fun updatePlayerInput(playerIndex: Int, raw: String) {
         if (playerIndex !in 0..3) return
-        // In CPU mode, Player 2's letter input is locked to CPU
         if (_uiState.value.selectedGameMode == GameMode.CPU && playerIndex == 1) return
 
         val sanitized = raw.trim().uppercase().takeLast(1)
@@ -123,6 +166,7 @@ class GameViewModel : ViewModel() {
         }
 
         aiTurnJob?.cancel()
+        SoundEngine.playLineClick()
         val initialBoard = BoardState.create(
             humanPlayerCount = humanCount,
             letters = activeLetters,
@@ -146,23 +190,58 @@ class GameViewModel : ViewModel() {
 
     fun onEdgeClicked(edge: EdgeCoordinate) {
         val currentBoard = _uiState.value.boardState
-        // Block all human interaction during CPU's turn or after game over
         if (currentBoard.isCurrentPlayerAi || currentBoard.isGameOver) return
 
         val outcome = DotsAndBoxesEngine.makeMove(currentBoard, edge) ?: return
-        _uiState.update {
-            it.copy(
-                boardState = outcome.newState,
+        applyMoveOutcomeWithAudioAndStats(outcome)
+        scheduleCpuTurnIfNeeded()
+    }
+
+    private fun applyMoveOutcomeWithAudioAndStats(outcome: MoveOutcome) {
+        val newBoard = outcome.newState
+        SoundEngine.playLineClick()
+        if (outcome.capturedBoxes.isNotEmpty()) {
+            SoundEngine.playBoxPop(newBoard.currentComboCount)
+        }
+        if (newBoard.isGameOver) {
+            SoundEngine.playGameEndFanfare()
+        }
+
+        _uiState.update { state ->
+            val updatedStats = if (newBoard.isGameOver && !state.boardState.isGameOver) {
+                recordMatchResult(state.sessionStats, newBoard)
+            } else {
+                state.sessionStats
+            }
+            state.copy(
+                boardState = newBoard,
+                sessionStats = updatedStats,
                 hoveredEdge = null
             )
         }
-        scheduleCpuTurnIfNeeded()
+    }
+
+    private fun recordMatchResult(
+        currentStats: Map<Int, PlayerSessionStats>,
+        finishedBoard: BoardState
+    ): Map<Int, PlayerSessionStats> {
+        val mutable = currentStats.toMutableMap()
+        val winnerNum = finishedBoard.winner ?: return currentStats
+
+        for (player in finishedBoard.players) {
+            val pNum = player.playerNumber
+            val prev = mutable[pNum] ?: PlayerSessionStats()
+            mutable[pNum] = when {
+                winnerNum == 0 -> prev.copy(ties = prev.ties + 1)
+                winnerNum == pNum -> prev.copy(wins = prev.wins + 1)
+                else -> prev.copy(losses = prev.losses + 1)
+            }
+        }
+        return mutable
     }
 
     /**
      * Naturally delayed CPU action loop (600ms to 1000ms per move).
-     * When the CPU captures a box, it keeps the turn, waits the natural delay again,
-     * and calls `DotsAndBoxesEngine.cpuTakeTurn(...)` based on its difficulty tier.
      */
     private fun scheduleCpuTurnIfNeeded() {
         aiTurnJob?.cancel()
@@ -180,12 +259,7 @@ class GameViewModel : ViewModel() {
                     difficulty = latestBoard.cpuDifficulty
                 ) ?: break
                 val outcome = DotsAndBoxesEngine.makeMove(latestBoard, cpuEdge) ?: break
-                _uiState.update {
-                    it.copy(
-                        boardState = outcome.newState,
-                        hoveredEdge = null
-                    )
-                }
+                applyMoveOutcomeWithAudioAndStats(outcome)
             }
         }
     }
@@ -204,6 +278,7 @@ class GameViewModel : ViewModel() {
 
     fun restartMatch() {
         aiTurnJob?.cancel()
+        SoundEngine.playLineClick()
         val currentBoard = _uiState.value.boardState
         val letters = currentBoard.players.map { it.letter }
         _uiState.update {
