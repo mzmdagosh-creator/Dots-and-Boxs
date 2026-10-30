@@ -1,22 +1,33 @@
 <resources>
     <string name="app_name">Dots &amp; Boxes</string>
     <string name="setup_title">Dots &amp; Boxes</string>
-    <string name="setup_subtitle">5×9 Grid • 32 Tactile Boxes • 1 to 4 Players</string>
+    <string name="setup_subtitle">5×9 Grid • 32 Tactile Boxes • PvP &amp; CPU AI</string>
     <string name="setup_card_header">Match Setup</string>
-    <string name="player_count_label">Number of Players</string>
-    <string name="mode_1p_subtitle">1 Player vs Smart AI Opponent</string>
+    <string name="game_mode_label">Game Mode</string>
+    <string name="mode_pvp_button">Player vs Player</string>
+    <string name="mode_cpu_button">Player vs CPU</string>
+    <string name="cpu_difficulty_label">CPU Difficulty</string>
+    <string name="diff_easy">Easy</string>
+    <string name="diff_medium">Medium</string>
+    <string name="diff_hard">Hard</string>
+    <string name="diff_easy_desc">Easy (Naive): Takes immediate captures or picks random lines.</string>
+    <string name="diff_medium_desc">Medium (Careful): Captures boxes and actively avoids setting up 3rd sides.</string>
+    <string name="diff_hard_desc">Hard (Competitive): Chains cascades and minimizes opponent chain sacrifices.</string>
+    <string name="player_count_label">Number of Players (PvP)</string>
+    <string name="mode_1p_subtitle">Player 1 vs Smart CPU (%1$s)</string>
     <string name="mode_multi_subtitle">%1$d-Player Local Pass &amp; Play</string>
     <string name="setup_card_description">Choose a distinct single letter initial for each participant to stamp onto captured boxes.</string>
     <string name="player_one_label">Player 1 (Cyan)</string>
     <string name="player_two_label">Player 2 (Coral)</string>
-    <string name="player_two_ai_label">AI Bot (Coral)</string>
+    <string name="player_two_ai_label">CPU Locked (Coral)</string>
     <string name="player_three_label">Player 3 (Emerald)</string>
     <string name="player_four_label">Player 4 (Violet)</string>
     <string name="start_game_button">Start Game</string>
     <string name="error_same_letter">All active players must choose distinct letters.</string>
     <string name="error_empty_letter">Every active player must enter 1 character.</string>
     <string name="turn_indicator_active">TURN</string>
-    <string name="turn_indicator_ai_thinking">AI THINKING…</string>
+    <string name="turn_indicator_ai_thinking">CPU IS THINKING…</string>
+    <string name="turn_indicator_ai_drawing">CPU IS DRAWING…</string>
     <string name="turn_indicator_waiting">WAIT</string>
     <string name="extra_turn_badge">STREAK! EXTRA TURN</string>
     <string name="combo_badge_format">%1$d× COMBO PULSE! EXTRA TURN</string>
@@ -35,5 +46,5 @@
     <string name="close_button">Close</string>
     <string name="copied_toast">Copied index.html to clipboard</string>
     <string name="hero_banner_desc">Neon geometric Dots and Boxes grid banner</string>
-    <string name="rules_summary">Select 1 Player (vs Smart AI) or 2–4 Players. Tap any open gap between adjacent dots to draw a line. Capturing multiple squares in a single round triggers a Combo Pulse and Zoom effect!</string>
+    <string name="rules_summary">Play PvP (2–4 Players) or challenge the CPU across Easy, Medium, and Hard difficulty tiers. Capturing multiple squares in a single round triggers a Combo Pulse and Zoom effect!</string>
 </resources>

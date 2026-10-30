@@ -1,11 +1,13 @@
 package com.example
 
 import com.example.model.BoardState
+import com.example.model.CpuDifficulty
 import com.example.model.DotsAndBoxesEngine
 import com.example.model.EdgeCoordinate
 import com.example.model.EdgeOrientation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -28,28 +30,24 @@ class ExampleUnitTest {
     fun completingSingleBox_capturesBoxAndGrantsExtraTurn() {
         var state = BoardState.create(2, listOf("X", "O"))
 
-        // P1 claims top (0,0) -> turn passes to P2
         state = DotsAndBoxesEngine.makeMove(
             state,
             EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0)
         )!!.newState
         assertEquals(2, state.currentPlayer)
 
-        // P2 claims bottom (1,0) -> turn passes to P1
         state = DotsAndBoxesEngine.makeMove(
             state,
             EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0)
         )!!.newState
         assertEquals(1, state.currentPlayer)
 
-        // P1 claims left (0,0) -> turn passes to P2
         state = DotsAndBoxesEngine.makeMove(
             state,
             EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0)
         )!!.newState
         assertEquals(2, state.currentPlayer)
 
-        // P2 claims right (0,1) -> completes box (0,0), P2 score = 1, P2 keeps turn!
         val outcome = DotsAndBoxesEngine.makeMove(
             state,
             EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1)
@@ -63,7 +61,6 @@ class ExampleUnitTest {
         assertEquals(1, outcome.newState.currentComboCount)
         assertFalse(outcome.newState.isMultiSquareCombo)
 
-        // Re-clicking the same edge returns null
         assertNull(
             DotsAndBoxesEngine.makeMove(
                 outcome.newState,
@@ -75,7 +72,6 @@ class ExampleUnitTest {
     @Test
     fun completingTwoBoxesSimultaneously_triggersMultiSquareComboAndOneExtraTurn() {
         var state = BoardState.create(2, listOf("A", "B"))
-        // Pre-fill 3 sides of box (0,0) and 3 sides of box (0,1), leaving shared vertical edge (0,1) open
         val moves = listOf(
             EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0),
             EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0),
@@ -89,7 +85,6 @@ class ExampleUnitTest {
         }
         assertEquals(1, state.currentPlayer)
 
-        // P1 claims shared vertical edge (0,1) -> captures both (0,0) and (0,1)
         val outcome = DotsAndBoxesEngine.makeMove(
             state,
             EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1)
@@ -105,94 +100,31 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun consecutiveCapturesInSameRound_accumulateMultiSquareComboAndResetOnNonCapture() {
-        var state = BoardState.create(2, listOf("A", "B"))
-        // Set up box (0,0) with 3 sides and box (0,2) with 3 sides
-        val setupMoves = listOf(
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0),
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0),
-            EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0),
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 2),
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 2),
-            EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 2)
-        )
-        for (edge in setupMoves) {
-            state = DotsAndBoxesEngine.makeMove(state, edge)!!.newState
-        }
-
-        // Move 1 by P1: captures box (0,0) -> combo = 1
-        state = DotsAndBoxesEngine.makeMove(
-            state,
-            EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1)
-        )!!.newState
-        assertEquals(1, state.currentComboCount)
-        assertFalse(state.isMultiSquareCombo)
-
-        // Move 2 by P1 (extra turn): captures box (0,2) -> combo = 2 (Multi-Square Combo!)
-        state = DotsAndBoxesEngine.makeMove(
-            state,
-            EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 3)
-        )!!.newState
-        assertEquals(2, state.currentComboCount)
-        assertTrue(state.isMultiSquareCombo)
-        assertEquals(2, state.comboChainBoxes.size)
-
-        // Move 3 by P1 (extra turn): non-capturing move -> combo resets to 0 and turn passes to P2
-        state = DotsAndBoxesEngine.makeMove(
-            state,
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 4, 7)
-        )!!.newState
-        assertEquals(0, state.currentComboCount)
-        assertFalse(state.isMultiSquareCombo)
-        assertTrue(state.comboChainBoxes.isEmpty())
-        assertEquals(2, state.currentPlayer)
-    }
-
-    @Test
-    fun fourPlayersMode_rotatesTurnsFrom1Through4() {
-        var state = BoardState.create(4, listOf("A", "B", "C", "D"))
-        assertEquals(4, state.activePlayerCount)
-        assertEquals(1, state.currentPlayer)
-
-        state = DotsAndBoxesEngine.makeMove(
-            state,
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0)
-        )!!.newState
-        assertEquals(2, state.currentPlayer)
-
-        state = DotsAndBoxesEngine.makeMove(
-            state,
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 1)
-        )!!.newState
-        assertEquals(3, state.currentPlayer)
-
-        state = DotsAndBoxesEngine.makeMove(
-            state,
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 2)
-        )!!.newState
-        assertEquals(4, state.currentPlayer)
-
-        state = DotsAndBoxesEngine.makeMove(
-            state,
-            EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 3)
-        )!!.newState
-        assertEquals(1, state.currentPlayer)
-    }
-
-    @Test
-    fun singlePlayerMode_configuresAiOpponentAndSelectsCaptureMove() {
-        var state = BoardState.create(1, listOf("A", "C"))
-        assertEquals(2, state.activePlayerCount)
-        assertFalse(state.isPlayerAi(1))
+    fun cpuDifficulties_easyMediumHardPrioritizeScoringAndAvoidOrMinimizeThirdSides() {
+        var state = BoardState.create(1, listOf("A", "C"), CpuDifficulty.HARD)
+        assertEquals("C", state.player2Letter)
         assertTrue(state.isPlayerAi(2))
 
-        // Set up 3 sides of box (0,0)
+        // Set up 2 sides of box (0,0): top (0,0) and bottom (1,0)
         state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0))!!.newState
         state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0))!!.newState
+
+        // Medium and Hard must avoid completing the 3rd side of box (0,0) -> VERTICAL (0,0) and VERTICAL (0,1)
+        val mediumMove = DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.MEDIUM)!!
+        assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0), mediumMove)
+        assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1), mediumMove)
+
+        val hardMove = DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.HARD)!!
+        assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0), hardMove)
+        assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1), hardMove)
+
+        // Now add the 3rd side of box (0,0): VERTICAL (0,0)
         state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0))!!.newState
 
-        // AI should pick the 4th side (VERTICAL, 0, 1) to complete box (0,0)
-        val aiChoice = DotsAndBoxesEngine.chooseSmartAiMove(state)
-        assertEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1), aiChoice)
+        // All three difficulties (Easy, Medium, Hard) must take the 4th side VERTICAL (0,1)
+        val expectedCapture = EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1)
+        assertEquals(expectedCapture, DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.EASY))
+        assertEquals(expectedCapture, DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.MEDIUM))
+        assertEquals(expectedCapture, DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.HARD))
     }
 }

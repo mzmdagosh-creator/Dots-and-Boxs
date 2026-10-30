@@ -24,7 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.outlined.GridOn
@@ -56,6 +56,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.model.CpuDifficulty
+import com.example.model.GameMode
 import com.example.ui.theme.DotWhite
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.MutedText
@@ -71,12 +73,17 @@ import com.example.ui.theme.Player4VioletFill
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
+import com.example.ui.theme.StreakAmber
 
 @Composable
 fun SetupScreen(
+    selectedGameMode: GameMode,
+    selectedCpuDifficulty: CpuDifficulty,
     selectedPlayerCount: Int,
     playerInputs: List<String>,
     errorResId: Int?,
+    onSelectGameMode: (GameMode) -> Unit,
+    onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onSelectPlayerCount: (Int) -> Unit,
     onPlayerInputChange: (Int, String) -> Unit,
     onStartGame: () -> Unit,
@@ -84,6 +91,7 @@ fun SetupScreen(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val isCpuMode = selectedGameMode == GameMode.CPU
 
     Box(
         modifier = modifier
@@ -121,7 +129,7 @@ fun SetupScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(132.dp)
+                            .height(128.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_hero_dots_boxes),
@@ -149,7 +157,7 @@ fun SetupScreen(
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Text(
-                                    text = "5×9 DOTS • 1–4 PLAYERS",
+                                    text = "5×9 DOTS • PVP & CPU",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = DotWhite
                                 )
@@ -158,7 +166,7 @@ fun SetupScreen(
                     }
 
                     Column(
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -178,7 +186,7 @@ fun SetupScreen(
                 }
             }
 
-            // Player Count (1–4) & Initials Configuration Card
+            // Game Mode, CPU Difficulty / PvP Count & Player Initials Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -197,59 +205,156 @@ fun SetupScreen(
                         color = DotWhite
                     )
 
-                    // 1 to 4 Players Selector Pills
+                    // 1. Game Mode Segmented Control: Player vs Player (default) or Player vs Computer (CPU)
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.player_count_label),
+                            text = stringResource(R.string.game_mode_label),
                             style = MaterialTheme.typography.labelSmall,
                             color = MutedText
                         )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            for (count in 1..4) {
-                                val isSelected = selectedPlayerCount == count
-                                val pillAccent = when (count) {
-                                    1 -> Player1Cyan
-                                    2 -> Player2Coral
-                                    3 -> Player3Emerald
-                                    else -> Player4Violet
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(
-                                            if (isSelected) pillAccent else SlateSurfaceElevated
-                                        )
-                                        .border(
-                                            width = if (isSelected) 2.dp else 1.dp,
-                                            color = if (isSelected) pillAccent else SlateBorder,
-                                            shape = RoundedCornerShape(14.dp)
-                                        )
-                                        .clickable { onSelectPlayerCount(count) }
-                                        .testTag("player_count_${count}_button"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ModeTogglePill(
+                                title = stringResource(R.string.mode_pvp_button),
+                                icon = Icons.Filled.Group,
+                                isSelected = !isCpuMode,
+                                accentColor = Player1Cyan,
+                                testTag = "mode_pvp_button",
+                                onClick = { onSelectGameMode(GameMode.PVP) },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            ModeTogglePill(
+                                title = stringResource(R.string.mode_cpu_button),
+                                icon = Icons.Filled.SmartToy,
+                                isSelected = isCpuMode,
+                                accentColor = Player2Coral,
+                                testTag = "mode_cpu_button",
+                                onClick = { onSelectGameMode(GameMode.CPU) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // 2A. CPU Difficulty Segmented Control (Shown when Player vs Computer is selected)
+                    AnimatedVisibility(visible = isCpuMode) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.cpu_difficulty_label),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MutedText
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CpuDifficulty.entries.forEach { diff ->
+                                    val isSelected = selectedCpuDifficulty == diff
+                                    val diffAccent = when (diff) {
+                                        CpuDifficulty.EASY -> Player3Emerald
+                                        CpuDifficulty.MEDIUM -> StreakAmber
+                                        CpuDifficulty.HARD -> Player2Coral
+                                    }
+                                    val diffLabel = when (diff) {
+                                        CpuDifficulty.EASY -> stringResource(R.string.diff_easy)
+                                        CpuDifficulty.MEDIUM -> stringResource(R.string.diff_medium)
+                                        CpuDifficulty.HARD -> stringResource(R.string.diff_hard)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(
+                                                if (isSelected) diffAccent else SlateSurfaceElevated
+                                            )
+                                            .border(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) diffAccent else SlateBorder,
+                                                shape = RoundedCornerShape(14.dp)
+                                            )
+                                            .clickable { onSelectCpuDifficulty(diff) }
+                                            .testTag("cpu_diff_${diff.name.lowercase()}_button"),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = if (count == 1) Icons.Filled.SmartToy else Icons.Filled.Group,
-                                            contentDescription = null,
-                                            tint = if (isSelected) ObsidianBackground else pillAccent,
-                                            modifier = Modifier.size(16.dp)
-                                        )
                                         Text(
-                                            text = if (count == 1) "1P vs AI" else "${count}P",
+                                            text = diffLabel,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (isSelected) ObsidianBackground else DotWhite
+                                        )
+                                    }
+                                }
+                            }
+
+                            val diffDescription = when (selectedCpuDifficulty) {
+                                CpuDifficulty.EASY -> stringResource(R.string.diff_easy_desc)
+                                CpuDifficulty.MEDIUM -> stringResource(R.string.diff_medium_desc)
+                                CpuDifficulty.HARD -> stringResource(R.string.diff_hard_desc)
+                            }
+                            Text(
+                                text = diffDescription,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MutedText,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    // 2B. PvP Player Count Selector (2, 3, or 4 Players when PvP Mode is selected)
+                    AnimatedVisibility(visible = !isCpuMode) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.player_count_label),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MutedText
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                for (count in 2..4) {
+                                    val isSelected = selectedPlayerCount == count
+                                    val pillAccent = when (count) {
+                                        2 -> Player1Cyan
+                                        3 -> Player3Emerald
+                                        else -> Player4Violet
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(
+                                                if (isSelected) pillAccent else SlateSurfaceElevated
+                                            )
+                                            .border(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) pillAccent else SlateBorder,
+                                                shape = RoundedCornerShape(14.dp)
+                                            )
+                                            .clickable { onSelectPlayerCount(count) }
+                                            .testTag("player_count_${count}_button"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "$count Players",
                                             style = MaterialTheme.typography.labelLarge,
                                             color = if (isSelected) ObsidianBackground else DotWhite
                                         )
@@ -257,20 +362,9 @@ fun SetupScreen(
                                 }
                             }
                         }
-
-                        Text(
-                            text = if (selectedPlayerCount == 1) {
-                                stringResource(R.string.mode_1p_subtitle)
-                            } else {
-                                stringResource(R.string.mode_multi_subtitle, selectedPlayerCount)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Player1Cyan,
-                            textAlign = TextAlign.Center
-                        )
                     }
 
-                    // Row 1: Player 1 and Player 2 (or AI Bot in 1P mode)
+                    // Row 1: Player 1 and Player 2 (or Locked CPU in CPU Mode)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -278,6 +372,7 @@ fun SetupScreen(
                         PlayerInitialInputCard(
                             label = stringResource(R.string.player_one_label),
                             value = playerInputs.getOrElse(0) { "A" },
+                            isLocked = false,
                             accentColor = Player1Cyan,
                             accentFill = Player1CyanFill,
                             quickOptions = listOf("A", "X", "1", "P"),
@@ -287,33 +382,35 @@ fun SetupScreen(
                         )
 
                         PlayerInitialInputCard(
-                            label = if (selectedPlayerCount == 1) {
+                            label = if (isCpuMode) {
                                 stringResource(R.string.player_two_ai_label)
                             } else {
                                 stringResource(R.string.player_two_label)
                             },
-                            value = playerInputs.getOrElse(1) { "B" },
+                            value = playerInputs.getOrElse(1) { if (isCpuMode) "C" else "B" },
+                            isLocked = isCpuMode,
                             accentColor = Player2Coral,
                             accentFill = Player2CoralFill,
-                            quickOptions = listOf("B", "O", "2", "Z"),
+                            quickOptions = if (isCpuMode) emptyList() else listOf("B", "O", "2", "Z"),
                             testTag = "player2_letter_input",
                             onValueChange = { onPlayerInputChange(1, it) },
                             modifier = Modifier.weight(1f)
                         )
                     }
 
-                    // Row 2: Player 3 and Player 4 (shown when 3P or 4P is selected)
-                    AnimatedVisibility(visible = selectedPlayerCount >= 3) {
+                    // Row 2: Player 3 and Player 4 (shown when PvP 3P or 4P is selected)
+                    AnimatedVisibility(visible = !isCpuMode && selectedPlayerCount >= 3) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             PlayerInitialInputCard(
                                 label = stringResource(R.string.player_three_label),
-                                value = playerInputs.getOrElse(2) { "C" },
+                                value = playerInputs.getOrElse(2) { "D" },
+                                isLocked = false,
                                 accentColor = Player3Emerald,
                                 accentFill = Player3EmeraldFill,
-                                quickOptions = listOf("C", "M", "3", "E"),
+                                quickOptions = listOf("D", "M", "3", "E"),
                                 testTag = "player3_letter_input",
                                 onValueChange = { onPlayerInputChange(2, it) },
                                 modifier = Modifier.weight(1f)
@@ -322,10 +419,11 @@ fun SetupScreen(
                             if (selectedPlayerCount == 4) {
                                 PlayerInitialInputCard(
                                     label = stringResource(R.string.player_four_label),
-                                    value = playerInputs.getOrElse(3) { "D" },
+                                    value = playerInputs.getOrElse(3) { "E" },
+                                    isLocked = false,
                                     accentColor = Player4Violet,
                                     accentFill = Player4VioletFill,
-                                    quickOptions = listOf("D", "W", "4", "V"),
+                                    quickOptions = listOf("E", "W", "4", "V"),
                                     testTag = "player4_letter_input",
                                     onValueChange = { onPlayerInputChange(3, it) },
                                     modifier = Modifier.weight(1f)
@@ -435,9 +533,53 @@ fun SetupScreen(
 }
 
 @Composable
+private fun ModeTogglePill(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    accentColor: Color,
+    testTag: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(50.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isSelected) accentColor else SlateSurfaceElevated)
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) accentColor else SlateBorder,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSelected) ObsidianBackground else accentColor,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (isSelected) ObsidianBackground else DotWhite
+            )
+        }
+    }
+}
+
+@Composable
 private fun PlayerInitialInputCard(
     label: String,
     value: String,
+    isLocked: Boolean,
     accentColor: Color,
     accentFill: Color,
     quickOptions: List<String>,
@@ -454,23 +596,38 @@ private fun PlayerInitialInputCard(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = accentColor,
-            textAlign = TextAlign.Center
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (isLocked) {
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = accentColor,
+                textAlign = TextAlign.Center
+            )
+        }
 
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
+            enabled = !isLocked,
+            readOnly = isLocked,
             singleLine = true,
             textStyle = MaterialTheme.typography.headlineMedium.copy(
                 fontFamily = JetBrainsMonoFontFamily,
                 fontWeight = FontWeight.Bold,
                 fontSize = 26.sp,
                 textAlign = TextAlign.Center,
-                color = DotWhite
+                color = if (isLocked) accentColor else DotWhite
             ),
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Characters,
@@ -479,8 +636,11 @@ private fun PlayerInitialInputCard(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = accentColor,
                 unfocusedBorderColor = SlateBorder,
+                disabledBorderColor = accentColor.copy(alpha = 0.7f),
                 focusedContainerColor = accentFill,
                 unfocusedContainerColor = ObsidianBackground,
+                disabledContainerColor = accentFill,
+                disabledTextColor = accentColor,
                 cursorColor = accentColor
             ),
             shape = RoundedCornerShape(14.dp),
@@ -489,29 +649,42 @@ private fun PlayerInitialInputCard(
                 .testTag(testTag)
         )
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            quickOptions.forEach { preset ->
-                val isSelected = value.equals(preset, ignoreCase = true)
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) accentColor else ObsidianBackground)
-                        .border(1.dp, if (isSelected) accentColor else SlateBorder, CircleShape)
-                        .clickable { onValueChange(preset) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = preset,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = if (isSelected) ObsidianBackground else MutedText
-                    )
+        if (quickOptions.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                quickOptions.forEach { preset ->
+                    val isSelected = value.equals(preset, ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) accentColor else ObsidianBackground)
+                            .border(1.dp, if (isSelected) accentColor else SlateBorder, CircleShape)
+                            .clickable { onValueChange(preset) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = preset,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = if (isSelected) ObsidianBackground else MutedText
+                        )
+                    }
                 }
+            }
+        } else {
+            Box(
+                modifier = Modifier.height(28.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "CPU AUTO",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accentColor
+                )
             }
         }
     }

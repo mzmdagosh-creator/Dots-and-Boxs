@@ -54,9 +54,13 @@ fun DotsAndBoxesApp(
             when (destination) {
                 ScreenDestination.SETUP -> {
                     SetupScreen(
+                        selectedGameMode = uiState.selectedGameMode,
+                        selectedCpuDifficulty = uiState.selectedCpuDifficulty,
                         selectedPlayerCount = uiState.selectedPlayerCount,
                         playerInputs = uiState.playerInputs,
                         errorResId = uiState.setupErrorResId,
+                        onSelectGameMode = viewModel::selectGameMode,
+                        onSelectCpuDifficulty = viewModel::selectCpuDifficulty,
                         onSelectPlayerCount = viewModel::selectPlayerCount,
                         onPlayerInputChange = viewModel::updatePlayerInput,
                         onStartGame = {

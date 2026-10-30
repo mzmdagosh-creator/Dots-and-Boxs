@@ -1,498 +1,1036 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dots &amp; Boxes — 5x9 Grid (1–4 Players + Combo Pulse)</title>
-  <style>
-    :root {
-      --bg-primary: #0b1120;
-      --bg-surface: #131c31;
-      --bg-elevated: #1e293b;
-      --border-muted: #334155;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --p1-color: #22d3ee;
-      --p1-bg: rgba(34, 211, 238, 0.22);
-      --p2-color: #fb7185;
-      --p2-bg: rgba(251, 113, 133, 0.22);
-      --p3-color: #34d399;
-      --p3-bg: rgba(52, 211, 153, 0.22);
-      --p4-color: #c084fc;
-      --p4-bg: rgba(192, 132, 252, 0.22);
-      --line-idle: #1e293b;
-      --line-hover: #64748b;
-      --dot-size: clamp(9px, 1.8vw, 13px);
-      --box-size: clamp(26px, 7.2vw, 48px);
-      --board-zoom: 1;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dots and Boxes - 5x9 (PvP &amp; CPU AI)</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --surface-elevated: #0b1324;
+            --text-color: #f8fafc;
+            --muted-text: #94a3b8;
+            --dot-color: #e2e8f0;
+            --line-idle: #334155;
+            --line-hover: #64748b;
+            --p1-color: #3b82f6;
+            --p2-color: #ef4444;
+            --p3-color: #10b981;
+            --p4-color: #a855f7;
+            --accent-amber: #facc15;
+            --dot-size: clamp(9px, 1.9vw, 12px);
+            --box-size: clamp(26px, 7.4vw, 50px);
+            --board-zoom: 1;
+        }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-    }
+        * {
+            box-sizing: border-box;
+        }
 
-    body {
-      min-height: 100vh;
-      background: radial-gradient(circle at top, #172554 0%, var(--bg-primary) 65%);
-      color: var(--text-main);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at top, #172554 0%, var(--bg-color) 68%);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 16px;
+        }
 
-    .hidden {
-      display: none !important;
-    }
+        .container {
+            background: var(--surface-color);
+            padding: 1.75rem;
+            border-radius: 1.25rem;
+            border: 1px solid #334155;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+            text-align: center;
+            width: 100%;
+            max-width: 720px;
+            overflow-x: auto;
+            transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+        }
 
-    .setup-card {
-      width: 100%;
-      max-width: 480px;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-muted);
-      border-radius: 20px;
-      padding: 28px 24px;
-      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
-      text-align: center;
-    }
+        @keyframes comboBoardZoom {
+            0% { transform: scale(1); }
+            45% { transform: scale(1.048); box-shadow: 0 0 36px rgba(59, 130, 246, 0.45); }
+            100% { transform: scale(1); }
+        }
 
-    .setup-card h1 {
-      font-size: 1.9rem;
-      margin-bottom: 6px;
-    }
+        @keyframes boxComboPulse {
+            0% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.16); filter: brightness(1.45); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
 
-    .setup-card p.subtitle {
-      color: var(--text-muted);
-      font-size: 0.9rem;
-      margin-bottom: 18px;
-    }
+        .container.combo-zoom {
+            animation: comboBoardZoom 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
 
-    .count-selector {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      margin-bottom: 18px;
-    }
+        .box.combo-pulse {
+            animation: boxComboPulse 0.44s ease-out;
+        }
 
-    .count-btn {
-      padding: 10px 8px;
-      border-radius: 10px;
-      border: 1px solid var(--border-muted);
-      background: var(--bg-elevated);
-      color: var(--text-main);
-      font-weight: 700;
-      cursor: pointer;
-    }
+        h2 {
+            margin: 0 0 0.25rem 0;
+            font-size: 1.85rem;
+            letter-spacing: -0.02em;
+        }
 
-    .count-btn.active {
-      background: var(--p1-color);
-      color: var(--bg-primary);
-      border-color: var(--p1-color);
-    }
+        .subtitle {
+            margin: 0 0 1.25rem 0;
+            color: var(--muted-text);
+            font-size: 0.95rem;
+        }
 
-    .player-inputs {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
+        /* Setup Screen */
+        .setup-screen {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            max-width: 460px;
+            margin: 0 auto;
+        }
 
-    .input-group {
-      background: var(--bg-elevated);
-      border-radius: 14px;
-      padding: 12px;
-      border: 1px solid var(--border-muted);
-    }
+        .section-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted-text);
+            margin-bottom: 0.4rem;
+            text-align: left;
+        }
 
-    .input-group label {
-      display: block;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
+        .segmented-control {
+            display: flex;
+            gap: 0.5rem;
+            background: var(--surface-elevated);
+            padding: 0.35rem;
+            border-radius: 0.75rem;
+            border: 1px solid #334155;
+        }
 
-    .letter-input {
-      width: 56px;
-      height: 56px;
-      text-align: center;
-      font-size: 1.65rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      background: var(--bg-primary);
-      color: var(--text-main);
-      border: 1px solid var(--border-muted);
-      border-radius: 10px;
-      outline: none;
-    }
+        .seg-btn {
+            flex: 1;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.92rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 0.5rem;
+            background: transparent;
+            color: var(--muted-text);
+            cursor: pointer;
+            margin-top: 0;
+            transition: all 0.2s ease;
+        }
 
-    .error-msg {
-      color: #f87171;
-      font-size: 0.85rem;
-      min-height: 20px;
-      margin-bottom: 10px;
-    }
+        .seg-btn.active {
+            background: var(--p1-color);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+        }
 
-    .btn-primary {
-      width: 100%;
-      padding: 14px;
-      border: none;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--p1-color), #38bdf8);
-      color: #0b1120;
-      font-size: 1rem;
-      font-weight: 800;
-      cursor: pointer;
-    }
+        .seg-btn.diff-easy.active { background: #10b981; }
+        .seg-btn.diff-medium.active { background: #f59e0b; color: #0f172a; }
+        .seg-btn.diff-hard.active { background: #ef4444; }
 
-    .game-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      width: 100%;
-      max-width: 720px;
-    }
+        .input-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            font-size: 1.05rem;
+            background: var(--surface-elevated);
+            padding: 0.65rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid #334155;
+        }
 
-    .scoreboard {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
-      gap: 10px;
-      width: 100%;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-muted);
-      border-radius: 18px;
-      padding: 14px;
-    }
+        input {
+            padding: 0.45rem;
+            border-radius: 0.5rem;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+            width: 3.2rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
 
-    .player-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: var(--bg-elevated);
-      border: 2px solid transparent;
-    }
+        input:disabled {
+            opacity: 0.75;
+            background: #1e293b;
+            border-color: var(--p2-color);
+            color: var(--p2-color);
+            cursor: not-allowed;
+        }
 
-    .player-card.active {
-      border-color: var(--text-main);
-    }
+        .error-text {
+            color: #f87171;
+            font-size: 0.88rem;
+            min-height: 1.2rem;
+        }
 
-    .board-wrapper {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-muted);
-      border-radius: 20px;
-      padding: 18px;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-    }
+        button.primary-btn {
+            padding: 0.85rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 0.65rem;
+            background: var(--p1-color);
+            color: white;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.15s;
+            margin-top: 0.25rem;
+        }
 
-    @keyframes comboZoomPulse {
-      0% { transform: scale(1); }
-      45% { transform: scale(1.055); box-shadow: 0 0 32px rgba(34, 211, 238, 0.45); }
-      100% { transform: scale(1); }
-    }
+        button.primary-btn:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+        }
 
-    @keyframes boxComboPulse {
-      0% { transform: scale(1); filter: brightness(1); }
-      50% { transform: scale(1.16); filter: brightness(1.45); }
-      100% { transform: scale(1); filter: brightness(1); }
-    }
+        /* Game Screen */
+        .game-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
 
-    .board-wrapper.combo-zoom {
-      animation: comboZoomPulse 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
+        .header {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 0.75rem;
+            width: 100%;
+            margin-bottom: 0.85rem;
+            font-size: 1.15rem;
+            font-weight: bold;
+        }
 
-    .box.combo-pulse {
-      animation: boxComboPulse 0.45s ease-out;
-    }
+        .player-card {
+            padding: 0.6rem 0.9rem;
+            border-radius: 0.65rem;
+            background: var(--surface-elevated);
+            border: 2px solid transparent;
+            transition: border-color 0.25s, box-shadow 0.25s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
 
-    .zoom-bar {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
+        .active-p0 { border-color: var(--p1-color); box-shadow: 0 0 14px rgba(59, 130, 246, 0.35); }
+        .active-p1 { border-color: var(--p2-color); box-shadow: 0 0 14px rgba(239, 68, 68, 0.35); }
+        .active-p2 { border-color: var(--p3-color); box-shadow: 0 0 14px rgba(16, 185, 129, 0.35); }
+        .active-p3 { border-color: var(--p4-color); box-shadow: 0 0 14px rgba(168, 85, 247, 0.35); }
 
-    .zoom-btn {
-      padding: 6px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--border-muted);
-      background: var(--bg-elevated);
-      color: var(--text-main);
-      cursor: pointer;
-    }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 1rem;
+            min-height: 2rem;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
 
-    .board-grid {
-      display: grid;
-      transform: scale(var(--board-zoom));
-      transform-origin: top center;
-      grid-template-columns: repeat(8, var(--dot-size) var(--box-size)) var(--dot-size);
-      grid-template-rows: repeat(4, var(--dot-size) var(--box-size)) var(--dot-size);
-      align-items: center;
-      justify-items: center;
-    }
+        #turn-status-indicator {
+            font-size: 0.95rem;
+            font-weight: 700;
+            padding: 0.35rem 0.85rem;
+            border-radius: 999px;
+            background: var(--surface-elevated);
+            border: 1px solid #334155;
+            color: var(--text-color);
+        }
 
-    .dot {
-      width: var(--dot-size);
-      height: var(--dot-size);
-      border-radius: 50%;
-      background: var(--text-main);
-      z-index: 2;
-    }
+        #turn-status-indicator.cpu-thinking {
+            border-color: var(--p2-color);
+            color: #fca5a5;
+        }
 
-    .h-line {
-      width: 100%;
-      height: 7px;
-      border-radius: 999px;
-      background: var(--line-idle);
-      cursor: pointer;
-    }
+        #turn-status-indicator.combo-active {
+            border-color: var(--accent-amber);
+            color: var(--accent-amber);
+        }
 
-    .v-line {
-      width: 7px;
-      height: 100%;
-      border-radius: 999px;
-      background: var(--line-idle);
-      cursor: pointer;
-    }
+        .zoom-controls {
+            display: flex;
+            gap: 0.35rem;
+            align-items: center;
+        }
 
-    .h-line:not(.claimed):hover,
-    .v-line:not(.claimed):hover {
-      background: var(--line-hover);
-    }
+        .zoom-btn {
+            padding: 0.3rem 0.65rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            border-radius: 0.4rem;
+            border: 1px solid #475569;
+            background: var(--surface-elevated);
+            color: var(--text-color);
+            cursor: pointer;
+        }
 
-    .box {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      border-radius: 6px;
-    }
+        /* Grid Board Layout: 9 rows x 17 cols (Dots + Lines + Boxes) */
+        .board-viewport {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            overflow-x: auto;
+            padding: 0.5rem 0;
+        }
 
-    .claimed-p1 { background: var(--p1-color) !important; }
-    .claimed-p2 { background: var(--p2-color) !important; }
-    .claimed-p3 { background: var(--p3-color) !important; }
-    .claimed-p4 { background: var(--p4-color) !important; }
+        #board {
+            display: grid;
+            transform: scale(var(--board-zoom));
+            transform-origin: top center;
+            grid-template-columns: repeat(8, var(--dot-size) var(--box-size)) var(--dot-size);
+            grid-template-rows: repeat(4, var(--dot-size) var(--box-size)) var(--dot-size);
+            gap: 0;
+            margin-bottom: 1.25rem;
+            user-select: none;
+        }
 
-    .captured-p1 { background: var(--p1-bg); color: var(--p1-color); }
-    .captured-p2 { background: var(--p2-bg); color: var(--p2-color); }
-    .captured-p3 { background: var(--p3-bg); color: var(--p3-color); }
-    .captured-p4 { background: var(--p4-bg); color: var(--p4-color); }
-  </style>
+        #board.board-locked {
+            pointer-events: none;
+        }
+
+        .dot {
+            width: var(--dot-size);
+            height: var(--dot-size);
+            background-color: var(--dot-color);
+            border-radius: 50%;
+            z-index: 2;
+        }
+
+        .line {
+            background-color: var(--line-idle);
+            cursor: pointer;
+            transition: background-color 0.18s, transform 0.15s;
+            border-radius: 999px;
+        }
+
+        .line:hover:not(.drawn) {
+            background-color: var(--line-hover);
+        }
+
+        .line.drawn {
+            cursor: default;
+        }
+
+        .h-line {
+            height: var(--dot-size);
+            width: 100%;
+        }
+
+        .v-line {
+            width: var(--dot-size);
+            height: 100%;
+        }
+
+        .box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(1rem, 3.2vw, 1.65rem);
+            font-weight: 800;
+            border-radius: 0.35rem;
+            transition: background-color 0.25s, transform 0.2s;
+        }
+
+        #winner-display {
+            font-size: 1.35rem;
+            font-weight: bold;
+            margin-bottom: 0.75rem;
+            min-height: 1.8rem;
+        }
+
+        .footer-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .secondary-btn {
+            padding: 0.65rem 1.2rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border: 1px solid #475569;
+            border-radius: 0.5rem;
+            background: #334155;
+            color: white;
+            cursor: pointer;
+        }
+
+        .hidden { display: none !important; }
+    </style>
 </head>
 <body>
-  <section id="setup-screen" class="setup-card">
-    <h1>Dots &amp; Boxes</h1>
-    <p class="subtitle">5×9 Dot Grid • 1 to 4 Players</p>
-    <div class="count-selector">
-      <button class="count-btn" data-count="1">1P vs AI</button>
-      <button class="count-btn active" data-count="2">2 Players</button>
-      <button class="count-btn" data-count="3">3 Players</button>
-      <button class="count-btn" data-count="4">4 Players</button>
+
+    <div id="main-container" class="container">
+        <!-- 1. Pre-game Configuration -->
+        <div id="setup-screen" class="setup-screen">
+            <div>
+                <h2>Dots and Boxes</h2>
+                <p class="subtitle">5×9 Grid (32 Playable Boxes)</p>
+            </div>
+
+            <!-- Game Mode Selector: Player vs Player or Player vs Computer (CPU) -->
+            <div>
+                <div class="section-label">Game Mode</div>
+                <div class="segmented-control">
+                    <button type="button" id="mode-pvp-btn" class="seg-btn active" onclick="setGameMode('PVP')">Player vs Player</button>
+                    <button type="button" id="mode-cpu-btn" class="seg-btn" onclick="setGameMode('CPU')">Player vs Computer (CPU)</button>
+                </div>
+            </div>
+
+            <!-- CPU Difficulty Selector (Shown only in CPU Mode) -->
+            <div id="cpu-difficulty-section" class="hidden">
+                <div class="section-label">CPU Difficulty</div>
+                <div class="segmented-control">
+                    <button type="button" id="diff-easy-btn" class="seg-btn diff-easy" onclick="setCpuDifficulty('EASY')">Easy</button>
+                    <button type="button" id="diff-medium-btn" class="seg-btn diff-medium active" onclick="setCpuDifficulty('MEDIUM')">Medium</button>
+                    <button type="button" id="diff-hard-btn" class="seg-btn diff-hard" onclick="setCpuDifficulty('HARD')">Hard</button>
+                </div>
+            </div>
+
+            <!-- PvP Player Count Selector (Shown only in PvP Mode: 2 to 4 Players) -->
+            <div id="pvp-count-section">
+                <div class="section-label">Number of Players (PvP)</div>
+                <div class="segmented-control">
+                    <button type="button" class="seg-btn pvp-count-btn active" data-count="2" onclick="setPvpCount(2)">2 Players</button>
+                    <button type="button" class="seg-btn pvp-count-btn" data-count="3" onclick="setPvpCount(3)">3 Players</button>
+                    <button type="button" class="seg-btn pvp-count-btn" data-count="4" onclick="setPvpCount(4)">4 Players</button>
+                </div>
+            </div>
+
+            <!-- Player Letter Inputs -->
+            <div class="input-group">
+                <label id="p1-label" for="p1-letter">Player 1 Letter:</label>
+                <input type="text" id="p1-letter" maxlength="1" value="A">
+            </div>
+
+            <div class="input-group">
+                <label id="p2-label" for="p2-letter">Player 2 Letter:</label>
+                <input type="text" id="p2-letter" maxlength="1" value="B">
+            </div>
+
+            <div id="p3-group" class="input-group hidden">
+                <label for="p3-letter">Player 3 Letter:</label>
+                <input type="text" id="p3-letter" maxlength="1" value="D">
+            </div>
+
+            <div id="p4-group" class="input-group hidden">
+                <label for="p4-letter">Player 4 Letter:</label>
+                <input type="text" id="p4-letter" maxlength="1" value="E">
+            </div>
+
+            <div id="setup-error" class="error-text"></div>
+
+            <button type="button" class="primary-btn" onclick="startGame()">Start Game</button>
+        </div>
+
+        <!-- 2. Active Game UI -->
+        <div id="game-screen" class="game-screen">
+            <div id="scoreboard-header" class="header"></div>
+
+            <div class="status-bar">
+                <div id="turn-status-indicator">Player 1's Turn</div>
+                <div class="zoom-controls">
+                    <button type="button" class="zoom-btn" onclick="adjustZoom(-0.1)">Zoom -</button>
+                    <button type="button" class="zoom-btn" onclick="resetZoom()">Fit</button>
+                    <button type="button" class="zoom-btn" onclick="adjustZoom(0.1)">Zoom +</button>
+                </div>
+            </div>
+
+            <div id="winner-display"></div>
+
+            <div class="board-viewport">
+                <div id="board"></div>
+            </div>
+
+            <div class="footer-actions">
+                <button type="button" class="secondary-btn" onclick="restartCurrentMatch()">Restart Match</button>
+                <button type="button" class="secondary-btn" onclick="returnToSetup()">Change Mode / Setup</button>
+            </div>
+        </div>
     </div>
-    <div id="inputs-container" class="player-inputs"></div>
-    <div id="setup-error" class="error-msg"></div>
-    <button id="start-btn" class="btn-primary">Start Game</button>
-  </section>
 
-  <main id="game-screen" class="game-container hidden">
-    <header id="scoreboard" class="scoreboard"></header>
-    <div id="board-wrapper" class="board-wrapper">
-      <div class="zoom-bar">
-        <button id="zoom-out" class="zoom-btn">Zoom -</button>
-        <button id="zoom-reset" class="zoom-btn">Fit 100%</button>
-        <button id="zoom-in" class="zoom-btn">Zoom +</button>
-      </div>
-      <div id="board-grid" class="board-grid"></div>
-    </div>
-  </main>
+    <script>
+        const DOT_ROWS = 5;
+        const DOT_COLS = 9;
+        const BOX_ROWS = 4; // DOT_ROWS - 1
+        const BOX_COLS = 8; // DOT_COLS - 1
+        const TOTAL_BOXES = BOX_ROWS * BOX_COLS; // 32
 
-  <script>
-    const DOT_ROWS = 5, DOT_COLS = 9, BOX_ROWS = 4, BOX_COLS = 8;
-    let selectedMode = 2;
-    let activeCount = 2;
-    let letters = ['A', 'B', 'C', 'D'];
-    let scores = [0, 0, 0, 0];
-    let currentPlayer = 1;
-    let comboCount = 0;
-    let comboBoxEls = [];
-    let hEdges = [], vEdges = [], boxes = [], boxElements = [];
-    let zoom = 1;
+        const PLAYER_PALETTE = [
+            { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.22)' },
+            { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.22)' },
+            { color: '#10b981', bg: 'rgba(16, 185, 129, 0.22)' },
+            { color: '#a855f7', bg: 'rgba(168, 85, 247, 0.22)' }
+        ];
 
-    const inputsContainer = document.getElementById('inputs-container');
-    const countBtns = document.querySelectorAll('.count-btn');
-    const boardWrapper = document.getElementById('board-wrapper');
+        const mainContainer = document.getElementById('main-container');
+        const setupScreen = document.getElementById('setup-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const board = document.getElementById('board');
+        const scoreboardHeader = document.getElementById('scoreboard-header');
+        const turnStatusIndicator = document.getElementById('turn-status-indicator');
+        const winnerDisplay = document.getElementById('winner-display');
+        const setupError = document.getElementById('setup-error');
 
-    function renderInputs() {
-      const count = selectedMode === 1 ? 2 : selectedMode;
-      inputsContainer.innerHTML = '';
-      for (let i = 0; i < count; i++) {
-        const label = (selectedMode === 1 && i === 1) ? 'AI Bot' : `Player ${i + 1}`;
-        inputsContainer.innerHTML += `
-          <div class="input-group">
-            <label>${label}</label>
-            <input class="letter-input" data-idx="${i}" maxlength="1" value="${letters[i]}" />
-          </div>`;
-      }
-    }
+        let gameMode = 'PVP';          // 'PVP' or 'CPU'
+        let cpuDifficulty = 'MEDIUM';  // 'EASY', 'MEDIUM', or 'HARD'
+        let pvpPlayerCount = 2;        // 2, 3, or 4
 
-    countBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        countBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        selectedMode = parseInt(btn.dataset.count, 10);
-        renderInputs();
-      });
-    });
-    renderInputs();
+        let players = [];
+        let currentPlayer = 0;
+        let capturedBoxes = 0;
+        let isCpuTurnActive = false;
+        let cpuTimeoutId = null;
+        let currentComboCount = 0;
+        let currentComboBoxEls = [];
+        let boardZoom = 1;
 
-    document.getElementById('start-btn').addEventListener('click', () => {
-      const inputs = [...document.querySelectorAll('.letter-input')];
-      const vals = inputs.map(inp => inp.value.trim().toUpperCase());
-      if (vals.some(v => v.length !== 1)) {
-        document.getElementById('setup-error').textContent = 'Every player needs 1 letter.';
-        return;
-      }
-      if (new Set(vals).size !== vals.length) {
-        document.getElementById('setup-error').textContent = 'Letters must be unique.';
-        return;
-      }
-      vals.forEach((v, idx) => letters[idx] = v);
-      activeCount = vals.length;
-      document.getElementById('setup-screen').classList.add('hidden');
-      document.getElementById('game-screen').classList.remove('hidden');
-      initBoard();
-    });
+        // 2D State Arrays for O(1) adjacent-box evaluation & AI heuristics
+        let hLines = [];       // 5x8 boolean/number matrix for horizontal lines
+        let vLines = [];       // 4x9 boolean/number matrix for vertical lines
+        let hLineEls = [];     // 5x8 DOM element matrix
+        let vLineEls = [];     // 4x9 DOM element matrix
+        let boxesState = [];   // 4x8 matrix tracking how many sides (0..4) surround each box
+        let boxOwners = [];    // 4x8 matrix tracking owner index (-1 if unclaimed)
 
-    function initBoard() {
-      hEdges = Array.from({ length: DOT_ROWS }, () => Array(BOX_COLS).fill(0));
-      vEdges = Array.from({ length: BOX_ROWS }, () => Array(DOT_COLS).fill(0));
-      boxes = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(0));
-      boxElements = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(null));
-      scores = [0, 0, 0, 0];
-      currentPlayer = 1;
-      comboCount = 0;
-      comboBoxEls = [];
-      const grid = document.getElementById('board-grid');
-      grid.innerHTML = '';
+        function setGameMode(mode) {
+            gameMode = mode;
+            document.getElementById('mode-pvp-btn').classList.toggle('active', mode === 'PVP');
+            document.getElementById('mode-cpu-btn').classList.toggle('active', mode === 'CPU');
 
-      for (let r = 0; r < DOT_ROWS * 2 - 1; r++) {
-        for (let c = 0; c < DOT_COLS * 2 - 1; c++) {
-          const el = document.createElement('div');
-          if (r % 2 === 0 && c % 2 === 0) {
-            el.className = 'dot';
-          } else if (r % 2 === 0) {
-            el.className = 'h-line';
-            const hr = r / 2, hc = (c - 1) / 2;
-            el.addEventListener('click', () => handleMove('H', hr, hc, el));
-          } else if (c % 2 === 0) {
-            el.className = 'v-line';
-            const vr = (r - 1) / 2, vc = c / 2;
-            el.addEventListener('click', () => handleMove('V', vr, vc, el));
-          } else {
-            el.className = 'box';
-            boxElements[(r - 1) / 2][(c - 1) / 2] = el;
-          }
-          grid.appendChild(el);
+            const cpuSection = document.getElementById('cpu-difficulty-section');
+            const pvpCountSection = document.getElementById('pvp-count-section');
+            const p2Label = document.getElementById('p2-label');
+            const p2Input = document.getElementById('p2-letter');
+
+            if (mode === 'CPU') {
+                cpuSection.classList.remove('hidden');
+                pvpCountSection.classList.add('hidden');
+                document.getElementById('p3-group').classList.add('hidden');
+                document.getElementById('p4-group').classList.add('hidden');
+
+                // Lock Player 2 input to CPU default value 'C'
+                p2Label.textContent = 'CPU Letter (Locked):';
+                p2Input.value = 'C';
+                p2Input.disabled = true;
+            } else {
+                cpuSection.classList.add('hidden');
+                pvpCountSection.classList.remove('hidden');
+                p2Label.textContent = 'Player 2 Letter:';
+                p2Input.disabled = false;
+                if (p2Input.value === 'C') p2Input.value = 'B';
+                setPvpCount(pvpPlayerCount);
+            }
+            setupError.textContent = '';
         }
-      }
-      updateScoreboard();
-    }
 
-    function handleMove(type, r, c, el) {
-      if (type === 'H') {
-        if (hEdges[r][c] !== 0) return;
-        hEdges[r][c] = currentPlayer;
-      } else {
-        if (vEdges[r][c] !== 0) return;
-        vEdges[r][c] = currentPlayer;
-      }
-      el.classList.add('claimed', `claimed-p${currentPlayer}`);
-
-      let captured = 0;
-      if (type === 'H') {
-        if (r > 0 && checkBox(r - 1, c)) captured++;
-        if (r < BOX_ROWS && checkBox(r, c)) captured++;
-      } else {
-        if (c > 0 && checkBox(r, c - 1)) captured++;
-        if (c < BOX_COLS && checkBox(r, c)) captured++;
-      }
-
-      if (captured > 0) {
-        comboCount += captured;
-        if (comboCount >= 2) {
-          triggerComboPulseAndZoom();
+        function setCpuDifficulty(diff) {
+            cpuDifficulty = diff;
+            document.getElementById('diff-easy-btn').classList.toggle('active', diff === 'EASY');
+            document.getElementById('diff-medium-btn').classList.toggle('active', diff === 'MEDIUM');
+            document.getElementById('diff-hard-btn').classList.toggle('active', diff === 'HARD');
         }
-      } else {
-        comboCount = 0;
-        comboBoxEls = [];
-        currentPlayer = (currentPlayer % activeCount) + 1;
-      }
-      updateScoreboard();
-    }
 
-    function checkBox(br, bc) {
-      if (boxes[br][bc] !== 0) return false;
-      if (hEdges[br][bc] && hEdges[br + 1][bc] && vEdges[br][bc] && vEdges[br][bc + 1]) {
-        boxes[br][bc] = currentPlayer;
-        scores[currentPlayer - 1]++;
-        const boxEl = boxElements[br][bc];
-        boxEl.textContent = letters[currentPlayer - 1];
-        boxEl.classList.add(`captured-p${currentPlayer}`);
-        comboBoxEls.push(boxEl);
-        return true;
-      }
-      return false;
-    }
+        function setPvpCount(count) {
+            pvpPlayerCount = count;
+            document.querySelectorAll('.pvp-count-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.count, 10) === count);
+            });
+            document.getElementById('p3-group').classList.toggle('hidden', count < 3);
+            document.getElementById('p4-group').classList.toggle('hidden', count < 4);
+            setupError.textContent = '';
+        }
 
-    function triggerComboPulseAndZoom() {
-      boardWrapper.classList.remove('combo-zoom');
-      void boardWrapper.offsetWidth;
-      boardWrapper.classList.add('combo-zoom');
-      comboBoxEls.forEach(boxEl => {
-        boxEl.classList.remove('combo-pulse');
-        void boxEl.offsetWidth;
-        boxEl.classList.add('combo-pulse');
-      });
-    }
+        function startGame() {
+            const p1L = document.getElementById('p1-letter').value.trim().toUpperCase();
+            let p2L = document.getElementById('p2-letter').value.trim().toUpperCase();
 
-    function updateScoreboard() {
-      const sb = document.getElementById('scoreboard');
-      sb.innerHTML = '';
-      for (let i = 0; i < activeCount; i++) {
-        const isTurn = currentPlayer === i + 1;
-        sb.innerHTML += `
-          <div class="player-card ${isTurn ? 'active' : ''}">
-            <strong>P${i + 1} (${letters[i]})</strong>
-            <span>${scores[i]}</span>
-          </div>`;
-      }
-    }
+            if (gameMode === 'CPU') {
+                if (!p1L) {
+                    setupError.textContent = 'Please enter a letter for Player 1.';
+                    return;
+                }
+                p2L = (p1L === 'C') ? '🤖' : 'C';
+                document.getElementById('p2-letter').value = p2L;
 
-    document.getElementById('zoom-out').onclick = () => {
-      zoom = Math.max(0.65, zoom - 0.1);
-      document.documentElement.style.setProperty('--board-zoom', zoom);
-    };
-    document.getElementById('zoom-in').onclick = () => {
-      zoom = Math.min(1.35, zoom + 0.1);
-      document.documentElement.style.setProperty('--board-zoom', zoom);
-    };
-    document.getElementById('zoom-reset').onclick = () => {
-      zoom = 1;
-      document.documentElement.style.setProperty('--board-zoom', zoom);
-    };
-  </script>
+                players = [
+                    { name: 'Player 1', letter: p1L, score: 0, isCpu: false, ...PLAYER_PALETTE[0] },
+                    { name: `CPU (${cpuDifficulty})`, letter: p2L, score: 0, isCpu: true, ...PLAYER_PALETTE[1] }
+                ];
+            } else {
+                const rawLetters = [
+                    p1L,
+                    p2L,
+                    document.getElementById('p3-letter').value.trim().toUpperCase(),
+                    document.getElementById('p4-letter').value.trim().toUpperCase()
+                ].slice(0, pvpPlayerCount);
+
+                if (rawLetters.some(l => l.length !== 1)) {
+                    setupError.textContent = 'Every active player must enter a single letter.';
+                    return;
+                }
+                if (new Set(rawLetters).size !== rawLetters.length) {
+                    setupError.textContent = 'All players must choose distinct letters.';
+                    return;
+                }
+
+                players = rawLetters.map((letter, idx) => ({
+                    name: `Player ${idx + 1}`,
+                    letter,
+                    score: 0,
+                    isCpu: false,
+                    ...PLAYER_PALETTE[idx]
+                }));
+            }
+
+            setupError.textContent = '';
+            setupScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            gameScreen.style.display = 'flex';
+
+            initMatchState();
+        }
+
+        function initMatchState() {
+            if (cpuTimeoutId) {
+                clearTimeout(cpuTimeoutId);
+                cpuTimeoutId = null;
+            }
+            players.forEach(p => p.score = 0);
+            currentPlayer = 0;
+            capturedBoxes = 0;
+            isCpuTurnActive = false;
+            currentComboCount = 0;
+            currentComboBoxEls = [];
+            winnerDisplay.textContent = '';
+
+            buildBoard();
+            renderScoreboard();
+            updateUI();
+        }
+
+        function restartCurrentMatch() {
+            initMatchState();
+        }
+
+        function returnToSetup() {
+            if (cpuTimeoutId) {
+                clearTimeout(cpuTimeoutId);
+                cpuTimeoutId = null;
+            }
+            isCpuTurnActive = false;
+            gameScreen.classList.add('hidden');
+            setupScreen.classList.remove('hidden');
+        }
+
+        function buildBoard() {
+            board.innerHTML = '';
+            board.classList.remove('board-locked');
+
+            hLines = Array.from({ length: DOT_ROWS }, () => Array(BOX_COLS).fill(false));
+            vLines = Array.from({ length: BOX_ROWS }, () => Array(DOT_COLS).fill(false));
+            hLineEls = Array.from({ length: DOT_ROWS }, () => Array(BOX_COLS).fill(null));
+            vLineEls = Array.from({ length: BOX_ROWS }, () => Array(DOT_COLS).fill(null));
+            boxesState = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(0));
+            boxOwners = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(-1));
+
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 17; c++) {
+                    const el = document.createElement('div');
+
+                    if (r % 2 === 0 && c % 2 === 0) {
+                        el.className = 'dot';
+                    } else if (r % 2 === 0 && c % 2 !== 0) {
+                        const hr = r / 2;
+                        const hc = Math.floor(c / 2);
+                        el.className = 'line h-line';
+                        el.dataset.type = 'h';
+                        el.dataset.r = hr;
+                        el.dataset.c = hc;
+                        el.addEventListener('click', handleHumanLineClick);
+                        hLineEls[hr][hc] = el;
+                    } else if (r % 2 !== 0 && c % 2 === 0) {
+                        const vr = Math.floor(r / 2);
+                        const vc = c / 2;
+                        el.className = 'line v-line';
+                        el.dataset.type = 'v';
+                        el.dataset.r = vr;
+                        el.dataset.c = vc;
+                        el.addEventListener('click', handleHumanLineClick);
+                        vLineEls[vr][vc] = el;
+                    } else {
+                        el.className = 'box';
+                        el.id = `box-${Math.floor(r / 2)}-${Math.floor(c / 2)}`;
+                    }
+                    board.appendChild(el);
+                }
+            }
+        }
+
+        function renderScoreboard() {
+            scoreboardHeader.innerHTML = '';
+            players.forEach((p, idx) => {
+                const card = document.createElement('div');
+                card.id = `player-card-${idx}`;
+                card.className = 'player-card';
+                card.innerHTML = `
+                    <span style="color: ${p.color};">${p.name} (${p.letter})</span>
+                    <span id="player-score-${idx}">${p.score}</span>
+                `;
+                scoreboardHeader.appendChild(card);
+            });
+        }
+
+        function handleHumanLineClick(e) {
+            if (isCpuTurnActive || players[currentPlayer].isCpu || capturedBoxes === TOTAL_BOXES) {
+                return;
+            }
+            const line = e.currentTarget;
+            if (line.classList.contains('drawn')) return;
+
+            const type = line.dataset.type;
+            const r = parseInt(line.dataset.r, 10);
+            const c = parseInt(line.dataset.c, 10);
+
+            applyLineMove(type, r, c);
+        }
+
+        function applyLineMove(type, r, c) {
+            const lineEl = (type === 'h') ? hLineEls[r][c] : vLineEls[r][c];
+            if (!lineEl || lineEl.classList.contains('drawn')) return;
+
+            if (type === 'h') {
+                hLines[r][c] = true;
+            } else {
+                vLines[r][c] = true;
+            }
+
+            lineEl.classList.add('drawn');
+            lineEl.style.backgroundColor = players[currentPlayer].color;
+
+            let newlyCaptured = 0;
+            if (type === 'h') {
+                if (r < BOX_ROWS && updateBox(r, c)) newlyCaptured++;
+                if (r > 0 && updateBox(r - 1, c)) newlyCaptured++;
+            } else {
+                if (c < BOX_COLS && updateBox(r, c)) newlyCaptured++;
+                if (c > 0 && updateBox(r, c - 1)) newlyCaptured++;
+            }
+
+            if (newlyCaptured > 0) {
+                currentComboCount += newlyCaptured;
+                if (currentComboCount >= 2) {
+                    triggerMultiSquareComboPulse();
+                }
+            } else {
+                currentComboCount = 0;
+                currentComboBoxEls = [];
+                currentPlayer = (currentPlayer + 1) % players.length;
+            }
+
+            updateUI();
+
+            if (capturedBoxes === TOTAL_BOXES) {
+                isCpuTurnActive = false;
+                board.classList.remove('board-locked');
+                declareWinner();
+                return;
+            }
+
+            if (players[currentPlayer].isCpu) {
+                isCpuTurnActive = true;
+                board.classList.add('board-locked');
+                updateUI();
+                const naturalDelay = Math.floor(Math.random() * 401) + 600;
+                cpuTimeoutId = setTimeout(cpuTakeTurn, naturalDelay);
+            } else {
+                isCpuTurnActive = false;
+                board.classList.remove('board-locked');
+                updateUI();
+            }
+        }
+
+        function updateBox(r, c) {
+            boxesState[r][c]++;
+            if (boxesState[r][c] === 4 && boxOwners[r][c] === -1) {
+                boxOwners[r][c] = currentPlayer;
+                const boxEl = document.getElementById(`box-${r}-${c}`);
+                boxEl.textContent = players[currentPlayer].letter;
+                boxEl.style.backgroundColor = players[currentPlayer].bg;
+                boxEl.style.color = players[currentPlayer].color;
+
+                players[currentPlayer].score++;
+                capturedBoxes++;
+                currentComboBoxEls.push(boxEl);
+                return true;
+            }
+            return false;
+        }
+
+        function triggerMultiSquareComboPulse() {
+            mainContainer.classList.remove('combo-zoom');
+            void mainContainer.offsetWidth;
+            mainContainer.classList.add('combo-zoom');
+
+            currentComboBoxEls.forEach(boxEl => {
+                boxEl.classList.remove('combo-pulse');
+                void boxEl.offsetWidth;
+                boxEl.classList.add('combo-pulse');
+            });
+        }
+
+        function cpuTakeTurn() {
+            if (capturedBoxes === TOTAL_BOXES || !players[currentPlayer].isCpu) return;
+
+            const availableMoves = getAllAvailableMoves();
+            if (availableMoves.length === 0) return;
+
+            let chosenMove = null;
+            if (cpuDifficulty === 'EASY') {
+                chosenMove = chooseEasyMove(availableMoves);
+            } else if (cpuDifficulty === 'MEDIUM') {
+                chosenMove = chooseMediumMove(availableMoves);
+            } else {
+                chosenMove = chooseHardMove(availableMoves);
+            }
+
+            if (chosenMove) {
+                applyLineMove(chosenMove.type, chosenMove.r, chosenMove.c);
+            }
+        }
+
+        function getAllAvailableMoves() {
+            const moves = [];
+            for (let r = 0; r < DOT_ROWS; r++) {
+                for (let c = 0; c < BOX_COLS; c++) {
+                    if (!hLines[r][c]) moves.push({ type: 'h', r, c });
+                }
+            }
+            for (let r = 0; r < BOX_ROWS; r++) {
+                for (let c = 0; c < DOT_COLS; c++) {
+                    if (!vLines[r][c]) moves.push({ type: 'v', r, c });
+                }
+            }
+            return moves;
+        }
+
+        function getAdjacentBoxCoords(move) {
+            const adj = [];
+            if (move.type === 'h') {
+                if (move.r > 0) adj.push({ r: move.r - 1, c: move.c });
+                if (move.r < BOX_ROWS) adj.push({ r: move.r, c: move.c });
+            } else {
+                if (move.c > 0) adj.push({ r: move.r, c: move.c - 1 });
+                if (move.c < BOX_COLS) adj.push({ r: move.r, c: move.c });
+            }
+            return adj;
+        }
+
+        function chooseEasyMove(availableMoves) {
+            const scoringMoves = availableMoves.filter(m =>
+                getAdjacentBoxCoords(m).some(b => boxesState[b.r][b.c] === 3)
+            );
+            if (scoringMoves.length > 0) {
+                return scoringMoves[Math.floor(Math.random() * scoringMoves.length)];
+            }
+            return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+        }
+
+        function chooseMediumMove(availableMoves) {
+            const doubleCaptures = [];
+            const singleCaptures = [];
+            const safeMoves = [];
+            const riskySingleBoxMoves = [];
+            const riskyDoubleBoxMoves = [];
+
+            for (const move of availableMoves) {
+                const adj = getAdjacentBoxCoords(move);
+                const completable = adj.filter(b => boxesState[b.r][b.c] === 3).length;
+                const thirdSidesCreated = adj.filter(b => boxesState[b.r][b.c] === 2).length;
+
+                if (completable === 2) {
+                    doubleCaptures.push(move);
+                } else if (completable === 1) {
+                    singleCaptures.push(move);
+                } else if (thirdSidesCreated === 0) {
+                    safeMoves.push(move);
+                } else if (thirdSidesCreated === 1) {
+                    riskySingleBoxMoves.push(move);
+                } else {
+                    riskyDoubleBoxMoves.push(move);
+                }
+            }
+
+            if (doubleCaptures.length > 0) return randomChoice(doubleCaptures);
+            if (singleCaptures.length > 0) return randomChoice(singleCaptures);
+            if (safeMoves.length > 0) return randomChoice(safeMoves);
+            if (riskySingleBoxMoves.length > 0) return randomChoice(riskySingleBoxMoves);
+            return randomChoice(riskyDoubleBoxMoves);
+        }
+
+        function chooseHardMove(availableMoves) {
+            const scoringMoves = [];
+            const safeMoves = [];
+            const riskyMoves = [];
+
+            for (const move of availableMoves) {
+                const adj = getAdjacentBoxCoords(move);
+                const completable = adj.filter(b => boxesState[b.r][b.c] === 3).length;
+                const createsThird = adj.filter(b => boxesState[b.r][b.c] === 2).length;
+
+                if (completable > 0) {
+                    const unlocksCascade = adj.some(b => boxesState[b.r][b.c] === 2) ? 5 : 0;
+                    scoringMoves.push({ move, priority: completable * 10 + unlocksCascade });
+                } else if (createsThird === 0) {
+                    const totalExistingSides = adj.reduce((acc, b) => acc + boxesState[b.r][b.c], 0);
+                    safeMoves.push({ move, score: -totalExistingSides });
+                } else {
+                    riskyMoves.push(move);
+                }
+            }
+
+            if (scoringMoves.length > 0) {
+                scoringMoves.sort((a, b) => b.priority - a.priority);
+                const bestPriority = scoringMoves[0].priority;
+                const topScoring = scoringMoves.filter(m => m.priority === bestPriority).map(m => m.move);
+                return randomChoice(topScoring);
+            }
+
+            if (safeMoves.length > 0) {
+                safeMoves.sort((a, b) => b.score - a.score);
+                const bestSafeScore = safeMoves[0].score;
+                const topSafe = safeMoves.filter(m => m.score === bestSafeScore).map(m => m.move);
+                return randomChoice(topSafe);
+            }
+
+            let minChainSacrifice = Infinity;
+            let bestSacrificeMoves = [];
+
+            for (const move of riskyMoves) {
+                const sacrificedBoxes = simulateOpponentChainLength(move);
+                if (sacrificedBoxes < minChainSacrifice) {
+                    minChainSacrifice = sacrificedBoxes;
+                    bestSacrificeMoves = [move];
+                } else if (sacrificedBoxes === minChainSacrifice) {
+                    bestSacrificeMoves.push(move);
+                }
+            }
+
+            return randomChoice(bestSacrificeMoves);
+        }
+
+        function simulateOpponentChainLength(candidateMove) {
+            const simH = hLines.map(row => [...row]);
+            const simV = vLines.map(row => [...row]);
+            const simBoxes = boxesState.map(row => [...row]);
+
+            function applySimMove(m) {
+                if (m.type === 'h') simH[m.r][m.c] = true;
+                else simV[m.r][m.c] = true;
+
+                let captured = 0;
+                for (const b of getAdjacentBoxCoords(m)) {
+                    simBoxes[b.r][b.c]++;
+                    if (simBoxes[b.r][b.c] === 4) captured++;
+                }
+                return captured;
+            }
+
+            applySimMove(candidateMove);
+
+            let totalOpponentSweep = 0;
+            let foundCapture = true;
+
+            while (foundCapture) {
+                foundCapture = false;
+                for (let r = 0; r < BOX_ROWS; r++) {
+                    for (let c = 0; c < BOX_COLS; c++) {
+                        if (simBoxes[r][c] === 3) {
+                            let fourthMove = null;
+                            if (!simH[r][c]) fourthMove = { type: 'h', r, c };
+                            else if (!simH[r + 1][c]) fourthMove = { type: 'h', r: r + 1, c };
+                            else if (!simV[r][c]) fourthMove = { type: 'v', r, c };
+                            else if (!simV[r][c + 1]) fourthMove = { type: 'v', r, c: c + 1 };
+
+                            if (fourthMove) {
+                                totalOpponentSweep += applySimMove(fourthMove);
+                                foundCapture = true;
+                            }
+                        }
+                    }
+                }
+            }
+            return totalOpponentSweep;
+        }
+
+        function randomChoice(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function updateUI() {
+            players.forEach((p, idx) => {
+                const scoreEl = document.getElementById(`player-score-${idx}`);
+                const cardEl = document.getElementById(`player-card-${idx}`);
+                if (scoreEl) scoreEl.textContent = p.score;
+                if (cardEl) {
+                    cardEl.classList.toggle(`active-p${idx}`, currentPlayer === idx && capturedBoxes < TOTAL_BOXES);
+                }
+            });
+
+            const activeP = players[currentPlayer];
+            turnStatusIndicator.classList.remove('cpu-thinking', 'combo-active');
+
+            if (capturedBoxes === TOTAL_BOXES) {
+                turnStatusIndicator.textContent = 'Game Complete';
+            } else if (activeP.isCpu) {
+                turnStatusIndicator.textContent = currentComboCount >= 2
+                    ? `CPU is drawing... (${currentComboCount}x Combo!)`
+                    : 'CPU is thinking...';
+                turnStatusIndicator.classList.add('cpu-thinking');
+            } else if (currentComboCount >= 2) {
+                turnStatusIndicator.textContent = `${activeP.name} (${activeP.letter}) — ${currentComboCount}× COMBO EXTRA TURN!`;
+                turnStatusIndicator.classList.add('combo-active');
+            } else {
+                turnStatusIndicator.textContent = `${activeP.name}'s Turn (${activeP.letter})`;
+            }
+        }
+
+        function declareWinner() {
+            const maxScore = Math.max(...players.map(p => p.score));
+            const winners = players.filter(p => p.score === maxScore);
+
+            if (winners.length === 1) {
+                winnerDisplay.textContent = `${winners[0].name} (${winners[0].letter}) Wins with ${winners[0].score} Boxes!`;
+                winnerDisplay.style.color = winners[0].color;
+            } else {
+                winnerDisplay.textContent = `It's a Tie at ${maxScore} Boxes!`;
+                winnerDisplay.style.color = '#f8fafc';
+            }
+        }
+
+        function adjustZoom(delta) {
+            boardZoom = Math.min(1.35, Math.max(0.65, +(boardZoom + delta).toFixed(2)));
+            document.documentElement.style.setProperty('--board-zoom', boardZoom);
+        }
+
+        function resetZoom() {
+            boardZoom = 1;
+            document.documentElement.style.setProperty('--board-zoom', boardZoom);
+        }
+    </script>
 </body>
 </html>

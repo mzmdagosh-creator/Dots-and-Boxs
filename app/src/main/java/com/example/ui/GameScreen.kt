@@ -686,7 +686,7 @@ private fun PlayerScorePill(
 
             Column {
                 Text(
-                    text = if (player.isAi) "AI BOT" else "PLAYER ${player.playerNumber}",
+                    text = if (player.isAi) "CPU" else "PLAYER ${player.playerNumber}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MutedText
                 )
