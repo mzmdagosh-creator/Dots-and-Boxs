@@ -5780,39 +5780,88 @@ private fun FullScreenVictoryAnimationOverlay(
         }
     }
 }
-// ... your other code above ...
-
-@Composable
-fun SomeOtherFunction() {
-    // ...
-}
-// ^ This is the end of your existing code
-
-// Paste the new AI object right here, completely on its own!
-
 object NeonAiEngine {
     
     private const val MAX_DEPTH = 3 
 
     suspend fun calculateHardMove(
-        // ... the rest of the AI code ...
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.launch
+        availableLines: List<String>,
+        currentAiScore: Int,
+        currentPlayerScore: Int,
+        boardState: Any 
+    ): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        var bestScore = Int.MIN_VALUE
+        var bestMove: String? = null
+        var alpha = Int.MIN_VALUE
+        var beta = Int.MAX_VALUE
 
-fun triggerAiTurn() {
-    if (uiState.value.selectedCpuDifficulty == CpuDifficulty.HARD) {
-        // Launch a background thread
-        viewModelScope.launch {
-            // The UI will stay perfectly smooth while this runs
-            val bestMove = NeonAiEngine.calculateHardMove(
-                availableLines = uiState.value.getEmptyLines(),
-                currentAiScore = uiState.value.aiScore,
-                currentPlayerScore = uiState.value.playerScore,
-                boardState = uiState.value.boardState
-            )
+        val shuffledMoves = availableLines.shuffled()
+
+        for (move in shuffledMoves) {
+            val nextState = simulateMove(boardState, move)
+            val boxesCaptured = countCapturedBoxes(boardState, nextState)
+            val isStillAiTurn = boxesCaptured > 0
             
-            // Once the AI figures out the move, apply it
-            bestMove?.let { applyMoveToBoard(it) }
+            val score = minimax(
+                state = nextState,
+                depth = MAX_DEPTH - 1,
+                alpha = alpha,
+                beta = beta,
+                aiScore = currentAiScore + boxesCaptured,
+                playerScore = currentPlayerScore,
+                isAiTurn = isStillAiTurn
+            )
+
+            if (score > bestScore) {
+                bestScore = score
+                bestMove = move
+            }
+            alpha = kotlin.math.max(alpha, bestScore)
+        }
+        return@withContext bestMove
+    }
+
+    private fun minimax(state: Any, depth: Int, alpha: Int, beta: Int, aiScore: Int, playerScore: Int, isAiTurn: Boolean): Int {
+        val availableMoves = getAvailableMoves(state)
+        if (depth == 0 || availableMoves.isEmpty()) return evaluateBoard(state, aiScore, playerScore)
+
+        var currentAlpha = alpha
+        var currentBeta = beta
+
+        if (isAiTurn) {
+            var maxEval = Int.MIN_VALUE
+            for (move in availableMoves) {
+                val nextState = simulateMove(state, move)
+                val captured = countCapturedBoxes(state, nextState)
+                val eval = minimax(nextState, depth - 1, currentAlpha, currentBeta, aiScore + captured, playerScore, captured > 0)
+                maxEval = kotlin.math.max(maxEval, eval)
+                currentAlpha = kotlin.math.max(currentAlpha, eval)
+                if (currentBeta <= currentAlpha) break 
+            }
+            return maxEval
+        } else {
+            var minEval = Int.MAX_VALUE
+            for (move in availableMoves) {
+                val nextState = simulateMove(state, move)
+                val captured = countCapturedBoxes(state, nextState)
+                val eval = minimax(nextState, depth - 1, currentAlpha, currentBeta, aiScore, playerScore + captured, captured == 0)
+                minEval = kotlin.math.min(minEval, eval)
+                currentBeta = kotlin.math.min(currentBeta, eval)
+                if (currentBeta <= currentAlpha) break 
+            }
+            return minEval
         }
     }
+
+    private fun evaluateBoard(state: Any, aiScore: Int, playerScore: Int): Int {
+        var score = (aiScore - playerScore) * 10 
+        val dangerBoxes = countThreeSidedBoxes(state)
+        score -= (dangerBoxes * 15) 
+        return score
+    }
+
+    private fun simulateMove(currentState: Any, move: String): Any { return currentState }
+    private fun countCapturedBoxes(oldState: Any, newState: Any): Int { return 0 }
+    private fun countThreeSidedBoxes(state: Any): Int { return 0 }
+    private fun getAvailableMoves(state: Any): List<String> { return emptyList() }
 }
