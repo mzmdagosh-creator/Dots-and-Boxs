@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dots and Boxes - 5x9</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --text-color: #f8fafc;
+            --dot-color: #94a3b8;
+            --line-idle: #334155;
+            --line-hover: #64748b;
+            --p1-color: #3b82f6;
+            --p2-color: #ef4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        /* Setup Screen */
+        .setup-screen {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            font-size: 1.1rem;
+        }
+
+        input {
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+            width: 3rem;
+            font-size: 1.25rem;
+            text-transform: uppercase;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 0.5rem;
+            background: var(--p1-color);
+            color: white;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-top: 1rem;
+        }
+
+        button:hover { opacity: 0.8; }
+
+        /* Game Screen */
+        .game-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 2rem;
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .player-card {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+        }
+
+        .active-p1 { border-color: var(--p1-color); }
+        .active-p2 { border-color: var(--p2-color); }
+
+        /* Grid Board Layout: 9 rows x 17 cols (Dots + Lines) */
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 12px 50px) 12px;
+            grid-template-rows: repeat(4, 12px 50px) 12px;
+            gap: 0;
+            margin-bottom: 1.5rem;
+            user-select: none;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            background-color: var(--dot-color);
+            border-radius: 50%;
+        }
+
+        .line {
+            background-color: var(--line-idle);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .line:hover:not(.drawn) { background-color: var(--line-hover); }
+
+        .h-line {
+            height: 12px;
+            width: 100%;
+        }
+
+        .v-line {
+            width: 12px;
+            height: 100%;
+        }
+
+        .box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        #winner-display {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            min-height: 2rem;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Pre-game Configuration -->
+        <div id="setup-screen" class="setup-screen">
+            <h2>Dots and Boxes</h2>
+            <p>5x9 Grid (32 Boxes Total)</p>
+            <div class="input-group">
+                <label>Player 1 Letter:</label>
+                <input type="text" id="p1-letter" maxlength="1" value="A">
+            </div>
+            <div class="input-group">
+                <label>Player 2 Letter:</label>
+                <input type="text" id="p2-letter" maxlength="1" value="B">
+            </div>
+            <button onclick="startGame()">Start Game</button>
+        </div>
+
+        <!-- Active Game UI -->
+        <div id="game-screen" class="game-screen">
+            <div class="header">
+                <div id="p1-card" class="player-card">Player 1: 0</div>
+                <div id="p2-card" class="player-card">Player 2: 0</div>
+            </div>
+            
+            <div id="winner-display"></div>
+            <div id="board"></div>
+            
+            <button onclick="location.reload()" style="background: #475569;">Reset Game</button>
+        </div>
+    </div>
+
+    <script>
+        const setupScreen = document.getElementById('setup-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const board = document.getElementById('board');
+        const p1Card = document.getElementById('p1-card');
+        const p2Card = document.getElementById('p2-card');
+        const winnerDisplay = document.getElementById('winner-display');
+
+        let players = [];
+        let currentPlayer = 0;
+        let boxesState = [];
+        let capturedBoxes = 0;
+        const totalBoxes = 32; // 4 rows * 8 columns
+
+        function startGame() {
+            const p1L = document.getElementById('p1-letter').value.trim().toUpperCase() || 'A';
+            const p2L = document.getElementById('p2-letter').value.trim().toUpperCase() || 'B';
+
+            players = [
+                { letter: p1L, score: 0, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.2)' },
+                { letter: p2L, score: 0, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.2)' }
+            ];
+
+            setupScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            gameScreen.style.display = 'flex';
+
+            buildBoard();
+            updateUI();
+        }
+
+        function buildBoard() {
+            board.innerHTML = '';
+            // 4 rows, 8 columns matrix to track how many lines surround each box
+            boxesState = Array.from({length: 4}, () => Array(8).fill(0));
+            
+            // Loop generates the CSS grid. 
+            // 5 dots rows + 4 line rows = 9 total rows. 
+            // 9 dots cols + 8 line cols = 17 total columns.
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 17; c++) {
+                    const el = document.createElement('div');
+                    
+                    if (r % 2 === 0 && c % 2 === 0) {
+                        el.className = 'dot';
+                    } else if (r % 2 === 0 && c % 2 !== 0) {
+                        el.className = 'line h-line';
+                        el.dataset.type = 'h';
+                        el.dataset.r = r / 2;
+                        el.dataset.c = Math.floor(c / 2);
+                        el.addEventListener('click', handleLineClick);
+                    } else if (r % 2 !== 0 && c % 2 === 0) {
+                        el.className = 'line v-line';
+                        el.dataset.type = 'v';
+                        el.dataset.r = Math.floor(r / 2);
+                        el.dataset.c = c / 2;
+                        el.addEventListener('click', handleLineClick);
+                    } else {
+                        el.className = 'box';
+                        el.id = `box-${Math.floor(r / 2)}-${Math.floor(c / 2)}`;
+                    }
+                    board.appendChild(el);
+                }
+            }
+        }
+
+        function handleLineClick(e) {
+            const line = e.target;
+            if (line.classList.contains('drawn')) return; // Prevent double-clicking
+
+            // Mark line
+            line.classList.add('drawn');
+            line.style.backgroundColor = players[currentPlayer].color;
+
+            const type = line.dataset.type;
+            const r = parseInt(line.dataset.r);
+            const c = parseInt(line.dataset.c);
+            let scored = false;
+
+            // Map line click to adjacent boxes
+            if (type === 'h') {
+                if (r < 4) scored = updateBox(r, c) || scored;       // Box below line
+                if (r > 0) scored = updateBox(r - 1, c) || scored;   // Box above line
+            } else if (type === 'v') {
+                if (c < 8) scored = updateBox(r, c) || scored;       // Box to the right
+                if (c > 0) scored = updateBox(r, c - 1) || scored;   // Box to the left
+            }
+
+            // Turn logic
+            if (!scored) {
+                currentPlayer = 1 - currentPlayer; // Switch turn if no box was completed
+            }
+
+            updateUI();
+
+            if (capturedBoxes === totalBoxes) declareWinner();
+        }
+
+        function updateBox(r, c) {
+            boxesState[r][c]++;
+            if (boxesState[r][c] === 4) {
+                const boxEl = document.getElementById(`box-${r}-${c}`);
+                boxEl.textContent = players[currentPlayer].letter;
+                boxEl.style.backgroundColor = players[currentPlayer].bg;
+                boxEl.style.color = players[currentPlayer].color;
+                
+                players[currentPlayer].score++;
+                capturedBoxes++;
+                return true; // Grants an extra turn
+            }
+            return false;
+        }
+
+        function updateUI() {
+            p1Card.textContent = `${players[0].letter}: ${players[0].score}`;
+            p2Card.textContent = `${players[1].letter}: ${players[1].score}`;
+
+            if (currentPlayer === 0) {
+                p1Card.classList.add('active-p1');
+                p2Card.classList.remove('active-p2');
+            } else {
+                p2Card.classList.add('active-p2');
+                p1Card.classList.remove('active-p1');
+            }
+        }
+
+        function declareWinner() {
+            if (players[0].score > players[1].score) {
+                winnerDisplay.textContent = `Player 1 (${players[0].letter}) Wins!`;
+                winnerDisplay.style.color = players[0].color;
+            } else if (players[1].score > players[0].score) {
+                winnerDisplay.textContent = `Player 2 (${players[1].letter}) Wins!`;
+                winnerDisplay.style.color = players[1].color;
+            } else {
+                winnerDisplay.textContent = "It's a Tie!";
+                winnerDisplay.style.color = "#f8fafc";
+            }
+        }
+    </script>
+</body>
+  </html>
+  
