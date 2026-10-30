@@ -1,4 +1,4 @@
-    - name: Build APK with Cordova
+- name: Build APK with Cordova
       run: |
         # Create a new Cordova project in a unique folder to avoid conflicts
         cordova create cordova_project com.yourname.dotsandboxes "DotsAndBoxes"
