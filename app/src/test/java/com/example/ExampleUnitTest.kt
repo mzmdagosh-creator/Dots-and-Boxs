@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.model.BoardState
+import com.example.model.CampaignLevel
 import com.example.model.CpuDifficulty
 import com.example.model.DotsAndBoxesEngine
 import com.example.model.EdgeCoordinate
@@ -34,6 +35,54 @@ class ExampleUnitTest {
             assertEquals(grid.boxCols, state.boxes[0].size)
             assertEquals(grid.boxRows * grid.boxCols, state.totalBoxes)
         }
+    }
+
+    @Test
+    fun campaignLevels_followSixStageLinearProgression() {
+        val levels = CampaignLevel.entries
+        assertEquals(6, levels.size)
+
+        assertEquals(GridSize.SIZE_3X3, CampaignLevel.LEVEL_1.gridSize)
+        assertEquals(CpuDifficulty.EASY, CampaignLevel.LEVEL_1.difficulty)
+
+        assertEquals(GridSize.SIZE_4X4, CampaignLevel.LEVEL_2.gridSize)
+        assertEquals(CpuDifficulty.EASY, CampaignLevel.LEVEL_2.difficulty)
+
+        assertEquals(GridSize.SIZE_4X4, CampaignLevel.LEVEL_3.gridSize)
+        assertEquals(CpuDifficulty.MEDIUM, CampaignLevel.LEVEL_3.difficulty)
+
+        assertEquals(GridSize.SIZE_5X5, CampaignLevel.LEVEL_4.gridSize)
+        assertEquals(CpuDifficulty.MEDIUM, CampaignLevel.LEVEL_4.difficulty)
+
+        assertEquals(GridSize.SIZE_5X5, CampaignLevel.LEVEL_5.gridSize)
+        assertEquals(CpuDifficulty.HARD, CampaignLevel.LEVEL_5.difficulty)
+
+        assertEquals(GridSize.SIZE_6X6, CampaignLevel.LEVEL_6.gridSize)
+        assertEquals(CpuDifficulty.HARD, CampaignLevel.LEVEL_6.difficulty)
+    }
+
+    @Test
+    fun blitzTimeout_forfeitsTurnImmediatelyToOpponent() {
+        val state = BoardState.create(
+            humanPlayerCount = 1,
+            letters = listOf("A", "C"),
+            cpuDifficulty = CpuDifficulty.MEDIUM,
+            boxRows = 3,
+            boxCols = 3
+        )
+        assertEquals(1, state.currentPlayer)
+        val afterForfeit = DotsAndBoxesEngine.forfeitTurn(state)
+        assertEquals(2, afterForfeit.currentPlayer)
+        assertEquals(0, afterForfeit.currentComboCount)
+        assertFalse(afterForfeit.hasExtraTurnStreak)
+    }
+
+    @Test
+    fun minimaxDepth_isThreeForUpTo4x4_andTwoFor5x5Plus() {
+        assertEquals(3, DotsAndBoxesEngine.minimaxSearchDepth(3, 3))
+        assertEquals(3, DotsAndBoxesEngine.minimaxSearchDepth(4, 4))
+        assertEquals(2, DotsAndBoxesEngine.minimaxSearchDepth(5, 5))
+        assertEquals(2, DotsAndBoxesEngine.minimaxSearchDepth(6, 6))
     }
 
     @Test

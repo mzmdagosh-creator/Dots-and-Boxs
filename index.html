@@ -1011,8 +1011,12 @@
         let isCpuTurnActive = false;
         let cpuTimeoutId = null;
 
-        // Persistent session stats across matches in the current session
+        // Persistent session stats across matches and app refreshes via localStorage
         // Keyed by player slot index (0..3) -> { wins: 0, losses: 0, ties: 0 }
+        const STORAGE_KEY_SESSION_STATS = 'dots_and_boxes_session_stats';
+        const STORAGE_KEY_MATCH_HISTORY = 'dots_and_boxes_match_history';
+        const STORAGE_KEY_TOTAL_MATCHES = 'dots_and_boxes_total_matches';
+
         const sessionStats = {
             0: { wins: 0, losses: 0, ties: 0 },
             1: { wins: 0, losses: 0, ties: 0 },
@@ -1020,9 +1024,57 @@
             3: { wins: 0, losses: 0, ties: 0 }
         };
 
-        // Match History of the last 5 completed games in the current session
+        // Match History of the last 5 completed games persisted via localStorage
         let matchHistory = [];
         let totalCompletedMatches = 0;
+
+        function savePerformanceDataToLocalStorage() {
+            try {
+                window.localStorage.setItem(STORAGE_KEY_SESSION_STATS, JSON.stringify(sessionStats));
+                window.localStorage.setItem(STORAGE_KEY_MATCH_HISTORY, JSON.stringify(matchHistory));
+                window.localStorage.setItem(STORAGE_KEY_TOTAL_MATCHES, String(totalCompletedMatches));
+            } catch (err) {
+                // Ignore storage quota or private-mode errors
+            }
+        }
+
+        function loadPerformanceDataFromLocalStorage() {
+            try {
+                const rawStats = window.localStorage.getItem(STORAGE_KEY_SESSION_STATS);
+                if (rawStats) {
+                    const parsedStats = JSON.parse(rawStats);
+                    for (let i = 0; i < 4; i++) {
+                        if (parsedStats && parsedStats[i]) {
+                            sessionStats[i] = {
+                                wins: Number(parsedStats[i].wins) || 0,
+                                losses: Number(parsedStats[i].losses) || 0,
+                                ties: Number(parsedStats[i].ties) || 0
+                            };
+                        }
+                    }
+                }
+
+                const rawHistory = window.localStorage.getItem(STORAGE_KEY_MATCH_HISTORY);
+                if (rawHistory) {
+                    const parsedHistory = JSON.parse(rawHistory);
+                    if (Array.isArray(parsedHistory)) {
+                        matchHistory = parsedHistory.slice(0, 5);
+                    }
+                }
+
+                const rawTotal = window.localStorage.getItem(STORAGE_KEY_TOTAL_MATCHES);
+                if (rawTotal !== null) {
+                    const parsedTotal = parseInt(rawTotal, 10);
+                    if (!Number.isNaN(parsedTotal) && parsedTotal >= 0) {
+                        totalCompletedMatches = parsedTotal;
+                    }
+                } else if (matchHistory.length > 0) {
+                    totalCompletedMatches = Math.max(...matchHistory.map(m => Number(m.matchNumber) || 0), matchHistory.length);
+                }
+            } catch (err) {
+                // Ignore corrupt localStorage entries
+            }
+        }
 
         let hLines = [];
         let vLines = [];
@@ -1496,12 +1548,21 @@
         /**
          * =========================================================================
          * 4. PERSISTENT SESSION STATS & MATCH HISTORY FOOTER RENDERING
-         * Displays Wins/Losses and a scrollable list of the last 5 completed games.
+         * Displays Wins/Losses and a scrollable list of the last 5 completed games,
+         * persisted across app refreshes via localStorage.
          * =========================================================================
          */
         function renderSessionStats() {
+            if (!statsTalliesContainer) return;
             statsTalliesContainer.innerHTML = '';
-            players.forEach((p, idx) => {
+
+            const palette = getThemePalette();
+            const displayPlayers = players.length > 0 ? players : [
+                { name: 'Player 1', letter: 'A', ...palette[0] },
+                { name: gameMode === 'CPU' ? `CPU (${cpuDifficulty})` : 'Player 2', letter: gameMode === 'CPU' ? 'C' : 'B', ...palette[1] }
+            ];
+
+            displayPlayers.forEach((p, idx) => {
                 const stat = sessionStats[idx] || { wins: 0, losses: 0, ties: 0 };
                 const pill = document.createElement('div');
                 pill.className = 'stat-pill';
@@ -1991,7 +2052,7 @@
                 winnerDisplay.style.color = 'var(--text-color)';
             }
 
-            // Record in Match History (keep last 5 completed games in current session)
+            // Record in Match History (keep last 5 completed games) and persist via localStorage
             totalCompletedMatches++;
             const scoreSummary = players.map(p => `${p.letter}: ${p.score}`).join(' - ');
             matchHistory.unshift({
@@ -2005,8 +2066,13 @@
                 matchHistory = matchHistory.slice(0, 5);
             }
 
+            savePerformanceDataToLocalStorage();
             renderSessionStats();
         }
+
+        // Load persisted Session Stats and Match History from localStorage on initial load
+        loadPerformanceDataFromLocalStorage();
+        renderSessionStats();
     </script>
 </body>
 </html>

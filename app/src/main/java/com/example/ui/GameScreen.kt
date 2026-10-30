@@ -12,6 +12,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -58,6 +59,8 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -79,7 +82,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,12 +92,15 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -104,20 +112,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.audio.HapticEngine
 import com.example.model.BoardState
 import com.example.model.BoxCoordinate
+import com.example.model.CampaignLevel
 import com.example.model.CpuDifficulty
 import com.example.model.EdgeCoordinate
 import com.example.model.EdgeOrientation
 import com.example.model.GridSize
 import com.example.model.PlayerConfig
+import com.example.model.TimerMode
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalGamePalette
 import com.example.ui.theme.playerAccentColor
 import com.example.ui.theme.playerFillColor
+import com.example.viewmodel.HapticEvent
+import com.example.viewmodel.HapticEventType
 import com.example.viewmodel.MatchHistoryItem
 import com.example.viewmodel.PlayerSessionStats
+import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -129,15 +143,25 @@ import kotlin.math.sin
 fun GameScreen(
     themeMode: AppThemeMode,
     soundEnabled: Boolean,
+    activeCampaignLevel: CampaignLevel?,
+    justUnlockedNextCampaignLevel: Boolean,
     selectedGridSize: GridSize,
     selectedCpuDifficulty: CpuDifficulty,
+    selectedTimerMode: TimerMode,
+    blitzRemainingSeconds: Float,
+    blitzRemainingFraction: Float,
+    lastTurnForfeitedByTimeout: Boolean,
     boardState: BoardState,
     sessionStats: Map<Int, PlayerSessionStats>,
     matchHistory: List<MatchHistoryItem>,
     hoveredEdge: EdgeCoordinate?,
     boardZoom: Float,
+    lastHapticEvent: HapticEvent?,
+    victoryAnimationTriggerId: Int,
     onSelectGridSize: (GridSize) -> Unit,
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
+    onSelectTimerMode: (TimerMode) -> Unit,
+    onAdvanceToNextCampaignLevel: () -> Unit,
     onToggleTheme: () -> Unit,
     onToggleSound: () -> Unit,
     onEdgeHover: (EdgeCoordinate?) -> Unit,
@@ -150,6 +174,24 @@ fun GameScreen(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalGamePalette.current
+    val context = LocalContext.current
+    val hapticFeedback = LocalHapticFeedback.current
+
+    // Trigger hardware haptic "tick" on line draw and heavier "buzz" on box capture
+    LaunchedEffect(lastHapticEvent?.id) {
+        val event = lastHapticEvent ?: return@LaunchedEffect
+        when (event.type) {
+            HapticEventType.LINE_TICK -> {
+                HapticEngine.triggerLineTick(context, hapticFeedback)
+            }
+            HapticEventType.BOX_CAPTURE_BUZZ -> {
+                HapticEngine.triggerBoxCaptureBuzz(context, hapticFeedback, event.capturedCount)
+            }
+            HapticEventType.VICTORY_CELEBRATION -> {
+                HapticEngine.triggerVictoryCelebration(context, hapticFeedback)
+            }
+        }
+    }
 
     BackHandler {
         onReturnToSetup()
@@ -292,9 +334,14 @@ fun GameScreen(
                 onOpenHtmlViewer = onOpenHtmlViewer
             )
 
-            // Top Score Trackers (Cyan vs Magenta)
+            // Top Score Trackers (Cyan vs Magenta) + Blitz 5s Diminishing Progress Bar
             ScoreboardHeader(
                 boardState = boardState,
+                activeCampaignLevel = activeCampaignLevel,
+                selectedTimerMode = selectedTimerMode,
+                blitzRemainingSeconds = blitzRemainingSeconds,
+                blitzRemainingFraction = blitzRemainingFraction,
+                lastTurnForfeitedByTimeout = lastTurnForfeitedByTimeout,
                 neonGlowPulse = neonGlowPulse,
                 comboHeartbeatScale = comboHeartbeatScale,
                 modifier = Modifier.fillMaxWidth()
@@ -309,6 +356,9 @@ fun GameScreen(
             ) {
                 GameOverBanner(
                     boardState = boardState,
+                    activeCampaignLevel = activeCampaignLevel,
+                    justUnlockedNextCampaignLevel = justUnlockedNextCampaignLevel,
+                    onAdvanceToNextCampaignLevel = onAdvanceToNextCampaignLevel,
                     onPlayAgain = onRestartMatch,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -429,13 +479,16 @@ fun GameScreen(
 
             // Bottom Control Bar & Match History / Session Stats Footer
             BottomControlsAndFooter(
+                activeCampaignLevel = activeCampaignLevel,
                 selectedGridSize = selectedGridSize,
                 selectedCpuDifficulty = selectedCpuDifficulty,
+                selectedTimerMode = selectedTimerMode,
                 players = boardState.players,
                 sessionStats = sessionStats,
                 matchHistory = matchHistory,
                 onSelectGridSize = onSelectGridSize,
                 onSelectCpuDifficulty = onSelectCpuDifficulty,
+                onSelectTimerMode = onSelectTimerMode,
                 onRestartMatch = onRestartMatch,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -502,6 +555,19 @@ fun GameScreen(
                 }
             }
         }
+
+        // Full-Screen Victory Animation (Confetti Burst + Celebratory Radial Glow) when match ends
+        if (boardState.isGameOver) {
+            FullScreenVictoryAnimationOverlay(
+                boardState = boardState,
+                triggerId = victoryAnimationTriggerId,
+                activeCampaignLevel = activeCampaignLevel,
+                justUnlockedNextCampaignLevel = justUnlockedNextCampaignLevel,
+                onAdvanceToNextCampaignLevel = onAdvanceToNextCampaignLevel,
+                onPlayAgain = onRestartMatch,
+                onReturnToSetup = onReturnToSetup
+            )
+        }
     }
 }
 
@@ -514,13 +580,16 @@ fun GameScreen(
  */
 @Composable
 private fun BottomControlsAndFooter(
+    activeCampaignLevel: CampaignLevel?,
     selectedGridSize: GridSize,
     selectedCpuDifficulty: CpuDifficulty,
+    selectedTimerMode: TimerMode,
     players: List<PlayerConfig>,
     sessionStats: Map<Int, PlayerSessionStats>,
     matchHistory: List<MatchHistoryItem>,
     onSelectGridSize: (GridSize) -> Unit,
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
+    onSelectTimerMode: (TimerMode) -> Unit,
     onRestartMatch: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -539,16 +608,17 @@ private fun BottomControlsAndFooter(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Row 1: Grid Size Segmented Selector (3x3, 4x4, 5x5, 6x6)
+            // Row 1: Grid Size Segmented Selector (3x3, 4x4, 5x5, 6x6) + Blitz Timer Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(
                     text = "GRID:",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
                     ),
                     color = palette.mutedText
                 )
@@ -576,9 +646,51 @@ private fun BottomControlsAndFooter(
                             text = sizeOption.label,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.5.sp
                             ),
                             color = if (isSelected) Color.Black else palette.primaryText
+                        )
+                    }
+                }
+
+                val isBlitz = selectedTimerMode == TimerMode.BLITZ
+                Box(
+                    modifier = Modifier
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(if (isBlitz) palette.p2Accent else palette.surfaceElevated)
+                        .border(
+                            width = if (isBlitz) 1.5.dp else 1.dp,
+                            color = if (isBlitz) palette.p2Accent else palette.border,
+                            shape = RoundedCornerShape(9.dp)
+                        )
+                        .clickable {
+                            onSelectTimerMode(
+                                if (isBlitz) TimerMode.RELAXED else TimerMode.BLITZ
+                            )
+                        }
+                        .padding(horizontal = 8.dp)
+                        .testTag("game_timer_toggle_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isBlitz) Icons.Filled.Timer else Icons.Filled.TimerOff,
+                            contentDescription = stringResource(R.string.timer_mode_label),
+                            tint = if (isBlitz) Color.White else palette.mutedText,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = if (isBlitz) "Blitz (5s)" else "Relaxed",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            ),
+                            color = if (isBlitz) Color.White else palette.primaryText
                         )
                     }
                 }
@@ -591,11 +703,11 @@ private fun BottomControlsAndFooter(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "AI:",
+                    text = if (activeCampaignLevel != null) "LVL ${activeCampaignLevel.levelNumber}:" else "AI:",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    color = palette.mutedText
+                    color = if (activeCampaignLevel != null) palette.p1Accent else palette.mutedText
                 )
 
                 CpuDifficulty.entries.forEach { diff ->
@@ -1074,6 +1186,11 @@ private fun TopGameToolbar(
 @Composable
 private fun ScoreboardHeader(
     boardState: BoardState,
+    activeCampaignLevel: CampaignLevel?,
+    selectedTimerMode: TimerMode,
+    blitzRemainingSeconds: Float,
+    blitzRemainingFraction: Float,
+    lastTurnForfeitedByTimeout: Boolean,
     neonGlowPulse: Float,
     comboHeartbeatScale: Float,
     modifier: Modifier = Modifier
@@ -1093,6 +1210,46 @@ private fun ScoreboardHeader(
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (activeCampaignLevel != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(palette.surfaceElevated)
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("active_campaign_level_banner"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.EmojiEvents,
+                            contentDescription = null,
+                            tint = palette.streakAccent,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "${activeCampaignLevel.title} — ${activeCampaignLevel.subtitle}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = palette.primaryText
+                        )
+                    }
+                    Text(
+                        text = "${activeCampaignLevel.gridSize.label} • ${activeCampaignLevel.difficulty.label.uppercase()}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp
+                        ),
+                        color = palette.p1Accent
+                    )
+                }
+            }
+
             val players = boardState.players
             val chunkedPlayers = players.chunked(2)
             for (rowPlayers in chunkedPlayers) {
@@ -1121,6 +1278,106 @@ private fun ScoreboardHeader(
                     if (rowPlayers.size == 1) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
+                }
+            }
+
+            // Diminishing animated progress bar during the player's turn when Blitz (5s) is active
+            val showBlitzBar = selectedTimerMode == TimerMode.BLITZ &&
+                activeCampaignLevel == null &&
+                !boardState.isGameOver &&
+                !boardState.isCurrentPlayerAi
+
+            AnimatedVisibility(visible = showBlitzBar) {
+                val animatedFraction by animateFloatAsState(
+                    targetValue = blitzRemainingFraction.coerceIn(0f, 1f),
+                    animationSpec = tween(durationMillis = 80),
+                    label = "blitzProgressFraction"
+                )
+                val barColor = when {
+                    animatedFraction > 0.5f -> palette.p1Accent
+                    animatedFraction > 0.25f -> palette.streakAccent
+                    else -> palette.p2Accent
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(palette.backgroundDeep)
+                        .border(1.dp, barColor.copy(alpha = 0.65f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .testTag("blitz_timer_container"),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Timer,
+                                contentDescription = null,
+                                tint = barColor,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "BLITZ TURN TIMER",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = barColor
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.blitz_countdown_format, blitzRemainingSeconds),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = palette.primaryText,
+                            modifier = Modifier.testTag("blitz_timer_seconds_text")
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { animatedFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .testTag("blitz_timer_progress_bar"),
+                        color = barColor,
+                        trackColor = palette.surfaceElevated
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = lastTurnForfeitedByTimeout && !boardState.isGameOver) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(palette.p2Accent.copy(alpha = 0.18f))
+                        .border(1.dp, palette.p2Accent, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("blitz_timeout_banner"),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.blitz_timeout_forfeit_notice),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        ),
+                        color = palette.p2Accent
+                    )
                 }
             }
 
@@ -1420,10 +1677,10 @@ private fun DotNode(slotSize: Dp) {
 }
 
 /**
- * 6.dp thickness horizontal line:
+ * 6.dp thickness horizontal line with smooth Jetpack Compose point-A-to-point-B draw animation:
  * - Unselected: faint grey (20% opacity)
- * - Player 1: Bright Cyan
- * - Computer / Player 2: Neon Magenta
+ * - Player 1: Bright Cyan (#00E5FF)
+ * - Computer / Player 2: Neon Magenta (#FF007F)
  */
 @Composable
 private fun HorizontalEdgeCell(
@@ -1449,15 +1706,20 @@ private fun HorizontalEdgeCell(
     }
 
     val ownerColor = if (claimedBy != 0) playerAccentColor(claimedBy) else Color.Transparent
-    val barColor by animateColorAsState(
-        targetValue = if (claimedBy != 0) {
-            ownerColor
-        } else if (showHover) {
+    val trackColor by animateColorAsState(
+        targetValue = if (showHover) {
             activePlayerColor.copy(alpha = 0.65f)
         } else {
             palette.idleEdge
         },
-        label = "hEdgeColor"
+        animationSpec = tween(durationMillis = 180),
+        label = "hEdgeTrackColor"
+    )
+    // Smoothly animate drawing the line from Point A (left dot, 0f) to Point B (right dot, 1f)
+    val drawProgress by animateFloatAsState(
+        targetValue = if (claimedBy != 0) 1f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "hEdgeDrawProgress"
     )
 
     val barThickness = 6.dp
@@ -1484,38 +1746,49 @@ private fun HorizontalEdgeCell(
             .testTag("h_edge_${edge.row}_${edge.col}"),
         contentAlignment = Alignment.Center
     ) {
+        // Unselected 20% opacity faint grey track (or hover preview)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 1.dp)
                 .height(barThickness)
-                .drawBehind {
-                    if (claimedBy != 0) {
-                        drawRoundRect(
-                            color = ownerColor.copy(alpha = 0.45f * neonGlowPulse),
-                            size = size.copy(height = size.height * 2.2f),
-                            topLeft = Offset(0f, -size.height * 0.6f)
-                        )
-                    }
-                }
                 .clip(RoundedCornerShape(50))
-                .background(barColor)
-                .then(
-                    if (isLastClaimed) {
-                        Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50))
-                    } else {
-                        Modifier
-                    }
+                .background(trackColor),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            // Claimed neon line drawing smoothly from Point A (left) to Point B (right)
+            if (claimedBy != 0 || drawProgress > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(drawProgress.coerceIn(0f, 1f))
+                        .height(barThickness)
+                        .drawBehind {
+                            drawRoundRect(
+                                color = ownerColor.copy(alpha = 0.45f * neonGlowPulse),
+                                size = size.copy(height = size.height * 2.2f),
+                                topLeft = Offset(0f, -size.height * 0.6f)
+                            )
+                        }
+                        .clip(RoundedCornerShape(50))
+                        .background(ownerColor)
+                        .then(
+                            if (isLastClaimed) {
+                                Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50))
+                            } else {
+                                Modifier
+                            }
+                        )
                 )
-        )
+            }
+        }
     }
 }
 
 /**
- * 6.dp thickness vertical line:
+ * 6.dp thickness vertical line with smooth Jetpack Compose point-A-to-point-B draw animation:
  * - Unselected: faint grey (20% opacity)
- * - Player 1: Bright Cyan
- * - Computer / Player 2: Neon Magenta
+ * - Player 1: Bright Cyan (#00E5FF)
+ * - Computer / Player 2: Neon Magenta (#FF007F)
  */
 @Composable
 private fun VerticalEdgeCell(
@@ -1541,15 +1814,20 @@ private fun VerticalEdgeCell(
     }
 
     val ownerColor = if (claimedBy != 0) playerAccentColor(claimedBy) else Color.Transparent
-    val barColor by animateColorAsState(
-        targetValue = if (claimedBy != 0) {
-            ownerColor
-        } else if (showHover) {
+    val trackColor by animateColorAsState(
+        targetValue = if (showHover) {
             activePlayerColor.copy(alpha = 0.65f)
         } else {
             palette.idleEdge
         },
-        label = "vEdgeColor"
+        animationSpec = tween(durationMillis = 180),
+        label = "vEdgeTrackColor"
+    )
+    // Smoothly animate drawing the line from Point A (top dot, 0f) to Point B (bottom dot, 1f)
+    val drawProgress by animateFloatAsState(
+        targetValue = if (claimedBy != 0) 1f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "vEdgeDrawProgress"
     )
 
     val barThickness = 6.dp
@@ -1576,35 +1854,47 @@ private fun VerticalEdgeCell(
             .testTag("v_edge_${edge.row}_${edge.col}"),
         contentAlignment = Alignment.Center
     ) {
+        // Unselected 20% opacity faint grey track (or hover preview)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .padding(vertical = 1.dp)
                 .width(barThickness)
-                .drawBehind {
-                    if (claimedBy != 0) {
-                        drawRoundRect(
-                            color = ownerColor.copy(alpha = 0.45f * neonGlowPulse),
-                            size = size.copy(width = size.width * 2.2f),
-                            topLeft = Offset(-size.width * 0.6f, 0f)
-                        )
-                    }
-                }
                 .clip(RoundedCornerShape(50))
-                .background(barColor)
-                .then(
-                    if (isLastClaimed) {
-                        Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50))
-                    } else {
-                        Modifier
-                    }
+                .background(trackColor),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            // Claimed neon line drawing smoothly from Point A (top) to Point B (bottom)
+            if (claimedBy != 0 || drawProgress > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight(drawProgress.coerceIn(0f, 1f))
+                        .width(barThickness)
+                        .drawBehind {
+                            drawRoundRect(
+                                color = ownerColor.copy(alpha = 0.45f * neonGlowPulse),
+                                size = size.copy(width = size.width * 2.2f),
+                                topLeft = Offset(-size.width * 0.6f, 0f)
+                            )
+                        }
+                        .clip(RoundedCornerShape(50))
+                        .background(ownerColor)
+                        .then(
+                            if (isLastClaimed) {
+                                Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50))
+                            } else {
+                                Modifier
+                            }
+                        )
                 )
-        )
+            }
+        }
     }
 }
 
 /**
- * PlayableBoxCell filled with 40% opacity of the owning player's color when completed.
+ * PlayableBoxCell filled with 40% opacity of the owning player's color when completed,
+ * pulsing once when filled using Jetpack Compose animations.
  */
 @Composable
 private fun PlayableBoxCell(
@@ -1619,12 +1909,32 @@ private fun PlayableBoxCell(
 ) {
     val palette = LocalGamePalette.current
     val accentColor = if (owner != 0) playerAccentColor(owner) else Color.Transparent
-    // 40% opacity fill of the owning player's color
-    val boxFillColor = if (owner != 0) accentColor.copy(alpha = 0.40f) else Color.Transparent
+    // Smoothly fade in 40% opacity fill of the owning player's color
+    val boxFillColor by animateColorAsState(
+        targetValue = if (owner != 0) accentColor.copy(alpha = 0.40f) else Color.Transparent,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "boxFillColorAnim"
+    )
 
+    // Captured boxes pulse once when filled (1.0f -> 1.16f -> 1.0f)
+    val singleCapturePulse = remember { Animatable(1f) }
     val charJumpScale = remember { Animatable(0.2f) }
     LaunchedEffect(owner) {
         if (owner != 0) {
+            launch {
+                singleCapturePulse.snapTo(0.85f)
+                singleCapturePulse.animateTo(
+                    targetValue = 1.16f,
+                    animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
+                )
+                singleCapturePulse.animateTo(
+                    targetValue = 1.0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+            }
             charJumpScale.snapTo(0.25f)
             charJumpScale.animateTo(
                 targetValue = 1.75f,
@@ -1638,14 +1948,15 @@ private fun PlayableBoxCell(
                 )
             )
         } else {
+            singleCapturePulse.snapTo(1f)
             charJumpScale.snapTo(0.2f)
         }
     }
 
     val comboBoxScale = if (isNewlyCaptured || isInComboChain) {
-        1f + (comboPulseFraction * 0.16f)
+        singleCapturePulse.value * (1f + (comboPulseFraction * 0.12f))
     } else {
-        1f
+        singleCapturePulse.value
     }
 
     Box(
@@ -1719,6 +2030,9 @@ private fun PlayableBoxCell(
 @Composable
 private fun GameOverBanner(
     boardState: BoardState,
+    activeCampaignLevel: CampaignLevel?,
+    justUnlockedNextCampaignLevel: Boolean,
+    onAdvanceToNextCampaignLevel: () -> Unit,
     onPlayAgain: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1746,6 +2060,9 @@ private fun GameOverBanner(
         "${p.letter}: ${boardState.scoreForPlayer(p.playerNumber)}"
     }
 
+    val nextLevel = activeCampaignLevel?.nextLevel()
+    val canAdvanceCampaign = activeCampaignLevel != null && winner == 1 && nextLevel != null
+
     Card(
         modifier = modifier
             .border(2.dp, accentColor, RoundedCornerShape(16.dp))
@@ -1753,57 +2070,451 @@ private fun GameOverBanner(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = palette.surfaceElevated)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Filled.EmojiEvents,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column {
-                    Text(
-                        text = titleText,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = palette.primaryText
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.EmojiEvents,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Text(
-                        text = summaryScores,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = accentColor
-                    )
+                    Column {
+                        Text(
+                            text = titleText,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = palette.primaryText
+                        )
+                        Text(
+                            text = summaryScores,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accentColor
+                        )
+                        if (justUnlockedNextCampaignLevel && nextLevel != null) {
+                            Text(
+                                text = stringResource(
+                                    R.string.campaign_next_level_unlocked,
+                                    nextLevel.levelNumber
+                                ),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = palette.streakAccent,
+                                modifier = Modifier.testTag("campaign_unlocked_notice")
+                            )
+                        }
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-            Button(
-                onClick = onPlayAgain,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = accentColor,
-                    contentColor = Color.Black
-                ),
-                modifier = Modifier.testTag("play_again_button")
-            ) {
-                Text(
-                    text = stringResource(R.string.play_again_button),
-                    style = MaterialTheme.typography.labelLarge
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (canAdvanceCampaign) {
+                        Button(
+                            onClick = onAdvanceToNextCampaignLevel,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = palette.streakAccent,
+                                contentColor = Color.Black
+                            ),
+                            modifier = Modifier.testTag("next_campaign_level_button")
+                        ) {
+                            Text(
+                                text = stringResource(R.string.next_level_button),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onPlayAgain,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accentColor,
+                            contentColor = Color.Black
+                        ),
+                        modifier = Modifier.testTag("play_again_button")
+                    ) {
+                        Text(
+                            text = stringResource(R.string.play_again_button),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+private data class ConfettiParticleSpec(
+    val angleRad: Float,
+    val speedFactor: Float,
+    val startXFraction: Float,
+    val fallSpeed: Float,
+    val driftAmplitude: Float,
+    val rotationSpeed: Float,
+    val sizeDp: Float,
+    val colorIndex: Int
+)
+
+/**
+ * Full-Screen Victory Animation (Confetti Burst + Celebratory Radial Glow) triggered
+ * after a match ends and the winner is declared.
+ */
+@Composable
+private fun FullScreenVictoryAnimationOverlay(
+    boardState: BoardState,
+    triggerId: Int,
+    activeCampaignLevel: CampaignLevel?,
+    justUnlockedNextCampaignLevel: Boolean,
+    onAdvanceToNextCampaignLevel: () -> Unit,
+    onPlayAgain: () -> Unit,
+    onReturnToSetup: () -> Unit
+) {
+    val palette = LocalGamePalette.current
+    val winner = boardState.winner
+    val winnerAccent = if (winner != null && winner > 0) {
+        playerAccentColor(winner)
+    } else {
+        palette.streakAccent
+    }
+
+    var isCardDismissed by remember(triggerId, boardState.isGameOver) { mutableStateOf(false) }
+
+    val burstProgress = remember(triggerId) { Animatable(0f) }
+    val glowPulseTransition = rememberInfiniteTransition(label = "victoryGlowTransition")
+    val glowPulse by glowPulseTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "victoryGlowPulse"
+    )
+    val continuousFallPhase by glowPulseTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "victoryContinuousFall"
+    )
+
+    LaunchedEffect(triggerId, boardState.isGameOver) {
+        if (boardState.isGameOver) {
+            burstProgress.snapTo(0f)
+            burstProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 2200, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+
+    val particles = remember {
+        List(76) { idx ->
+            val goldenAngle = idx * 2.3999632f
+            ConfettiParticleSpec(
+                angleRad = goldenAngle,
+                speedFactor = 0.25f + ((idx * 37) % 100) / 100f * 0.85f,
+                startXFraction = ((idx * 19) % 100) / 100f,
+                fallSpeed = 0.4f + ((idx * 29) % 70) / 100f,
+                driftAmplitude = 18f + (idx % 5) * 9f,
+                rotationSpeed = (idx % 7 - 3) * 120f,
+                sizeDp = 5f + (idx % 4) * 2.5f,
+                colorIndex = idx % 5
+            )
+        }
+    }
+
+    val confettiColors = listOf(
+        palette.p1Accent,
+        palette.p2Accent,
+        palette.streakAccent,
+        palette.p3Accent,
+        palette.p4Accent
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("victory_confetti_overlay"),
+        contentAlignment = Alignment.Center
+    ) {
+        // Full-Screen Celebratory Radial Glow + Multi-Stage Confetti Burst Canvas
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("victory_confetti_canvas")
+        ) {
+            val center = Offset(size.width / 2f, size.height * 0.42f)
+            val maxDim = size.maxDimension
+
+            // 1. Celebratory Radial Glow
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        winnerAccent.copy(alpha = 0.28f * glowPulse),
+                        palette.streakAccent.copy(alpha = 0.12f * glowPulse),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = maxDim * (0.48f + 0.14f * glowPulse)
+                ),
+                center = center,
+                radius = maxDim * 0.65f
+            )
+
+            // 2. Expanding Shockwave Ring
+            val ringProgress = burstProgress.value
+            if (ringProgress < 0.98f) {
+                drawCircle(
+                    color = winnerAccent.copy(alpha = (1f - ringProgress) * 0.55f),
+                    center = center,
+                    radius = maxDim * 0.55f * ringProgress,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4.dp.toPx())
+                )
+            }
+
+            // 3. Confetti Burst + Cascading Shimmer Particles
+            val t = burstProgress.value
+            for (p in particles) {
+                val cColor = confettiColors[p.colorIndex]
+                // Radial burst trajectory combined with gravity & continuous celebratory cascade
+                val burstRadius = maxDim * 0.52f * p.speedFactor * sin(t * (PI / 2.0)).toFloat()
+                val gravityY = (t * t) * size.height * 0.55f * p.fallSpeed +
+                    continuousFallPhase * size.height * 0.22f
+                val swayX = sin((t * 6f + p.startXFraction * 10f).toDouble()).toFloat() * p.driftAmplitude
+
+                val px = (center.x + cos(p.angleRad) * burstRadius + swayX)
+                    .coerceIn(0f, size.width)
+                val py = ((center.y + sin(p.angleRad) * burstRadius * 0.7f + gravityY) % size.height)
+                    .let { if (it < 0f) it + size.height else it }
+
+                val particleAlpha = (0.92f - t * 0.25f).coerceIn(0.35f, 0.95f)
+                val rectW = p.sizeDp.dp.toPx()
+                val rectH = (p.sizeDp * 0.58f).dp.toPx()
+
+                rotate(
+                    degrees = (t * p.rotationSpeed + continuousFallPhase * 180f) % 360f,
+                    pivot = Offset(px, py)
+                ) {
+                    drawRect(
+                        color = cColor.copy(alpha = particleAlpha),
+                        topLeft = Offset(px - rectW / 2f, py - rectH / 2f),
+                        size = Size(rectW, rectH)
+                    )
+                }
+            }
+        }
+
+        // Celebratory Victory Card (can be dismissed to inspect the board directly)
+        AnimatedVisibility(
+            visible = !isCardDismissed,
+            enter = fadeIn(tween(240)) + scaleIn(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        ) {
+            val headlineText = when {
+                winner == null || winner == 0 -> stringResource(R.string.winner_banner_tie, boardState.maxScore)
+                boardState.isPlayerAi(winner) -> "COMPUTER WINS (${boardState.scoreForPlayer(winner)} PTS)"
+                else -> "PLAYER $winner VICTORY! (${boardState.scoreForPlayer(winner)} PTS)"
+            }
+            val nextLevel = activeCampaignLevel?.nextLevel()
+            val canAdvanceCampaign = activeCampaignLevel != null && winner == 1 && nextLevel != null
+
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 380.dp)
+                    .padding(horizontal = 20.dp)
+                    .shadow(24.dp, RoundedCornerShape(24.dp), spotColor = winnerAccent)
+                    .border(2.5.dp, winnerAccent, RoundedCornerShape(24.dp))
+                    .testTag("victory_celebration_modal"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = palette.backgroundDeep.copy(alpha = 0.94f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .scale(0.95f + glowPulse * 0.12f)
+                            .clip(CircleShape)
+                            .background(winnerAccent.copy(alpha = 0.22f))
+                            .border(2.dp, winnerAccent, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.EmojiEvents,
+                            contentDescription = null,
+                            tint = winnerAccent,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+
+                    Text(
+                        text = stringResource(R.string.victory_overlay_subtitle),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            letterSpacing = 1.5.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = palette.streakAccent,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = headlineText,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Black,
+                            shadow = Shadow(
+                                color = winnerAccent,
+                                offset = Offset.Zero,
+                                blurRadius = 18f
+                            )
+                        ),
+                        color = palette.primaryText,
+                        textAlign = TextAlign.Center
+                    )
+
+                    val scoreBreakdown = boardState.players.joinToString("   •   ") { p ->
+                        val label = if (p.isAi) "CPU (${p.letter})" else "P${p.playerNumber} (${p.letter})"
+                        "$label: ${boardState.scoreForPlayer(p.playerNumber)}"
+                    }
+                    Text(
+                        text = scoreBreakdown,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = winnerAccent,
+                        textAlign = TextAlign.Center
+                    )
+
+                    if (activeCampaignLevel != null) {
+                        val campaignStatusText = when {
+                            winner == 1 && nextLevel == null -> stringResource(R.string.campaign_completed_banner)
+                            justUnlockedNextCampaignLevel && nextLevel != null -> stringResource(
+                                R.string.campaign_next_level_unlocked,
+                                nextLevel.levelNumber
+                            )
+                            winner == 1 && nextLevel != null -> "Level ${activeCampaignLevel.levelNumber} Cleared!"
+                            else -> "Beat the Computer on ${activeCampaignLevel.title} to unlock the next stage!"
+                        }
+                        Text(
+                            text = campaignStatusText,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = palette.streakAccent,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (canAdvanceCampaign) {
+                            Button(
+                                onClick = onAdvanceToNextCampaignLevel,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("victory_next_level_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = palette.streakAccent,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.next_level_button),
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = onPlayAgain,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("victory_play_again_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = winnerAccent,
+                                contentColor = Color.Black
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(R.string.play_again_button),
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = onReturnToSetup,
+                            modifier = Modifier.testTag("victory_main_menu_button")
+                        ) {
+                            Text(
+                                text = "Main Menu",
+                                color = palette.mutedText
+                            )
+                        }
+                        TextButton(
+                            onClick = { isCardDismissed = true },
+                            modifier = Modifier.testTag("dismiss_victory_overlay_button")
+                        ) {
+                            Text(
+                                text = "Inspect Board",
+                                color = palette.primaryText
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun SingleFileHtmlDialog(

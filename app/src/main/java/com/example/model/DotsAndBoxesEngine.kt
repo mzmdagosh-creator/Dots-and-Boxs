@@ -25,10 +25,10 @@ enum class GameMode {
     CPU
 }
 
-enum class CpuDifficulty {
-    EASY,
-    MEDIUM,
-    HARD
+enum class CpuDifficulty(val label: String) {
+    EASY("Easy"),
+    MEDIUM("Medium"),
+    HARD("Hard")
 }
 
 enum class GridSize(
@@ -48,6 +48,48 @@ enum class GridSize(
     companion object {
         fun fromDimensions(rows: Int, cols: Int): GridSize =
             entries.firstOrNull { it.boxRows == rows && it.boxCols == cols } ?: SIZE_4X4
+    }
+}
+
+/**
+ * Timer mode for Quick Match:
+ * - `RELAXED`: No turn timer ("Relaxed (Off)")
+ * - `BLITZ`: 5-second turn countdown ("Blitz (5s)"). If 5s runs out, player forfeits turn to CPU.
+ */
+enum class TimerMode(val durationSeconds: Int) {
+    RELAXED(0),
+    BLITZ(5)
+}
+
+/**
+ * Tournament Campaign Mode linear progression of 6 levels:
+ * - Level 1: 3x3 Grid, Easy AI
+ * - Level 2: 4x4 Grid, Easy AI
+ * - Level 3: 4x4 Grid, Medium AI
+ * - Level 4: 5x5 Grid, Medium AI
+ * - Level 5: 5x5 Grid, Hard AI
+ * - Level 6: 6x6 Grid, Hard AI
+ */
+enum class CampaignLevel(
+    val levelNumber: Int,
+    val title: String,
+    val subtitle: String,
+    val gridSize: GridSize,
+    val difficulty: CpuDifficulty
+) {
+    LEVEL_1(1, "Level 1", "3×3 Grid • Easy AI", GridSize.SIZE_3X3, CpuDifficulty.EASY),
+    LEVEL_2(2, "Level 2", "4×4 Grid • Easy AI", GridSize.SIZE_4X4, CpuDifficulty.EASY),
+    LEVEL_3(3, "Level 3", "4×4 Grid • Medium AI", GridSize.SIZE_4X4, CpuDifficulty.MEDIUM),
+    LEVEL_4(4, "Level 4", "5×5 Grid • Medium AI", GridSize.SIZE_5X5, CpuDifficulty.MEDIUM),
+    LEVEL_5(5, "Level 5", "5×5 Grid • Hard AI", GridSize.SIZE_5X5, CpuDifficulty.HARD),
+    LEVEL_6(6, "Level 6", "6×6 Grid • Hard AI", GridSize.SIZE_6X6, CpuDifficulty.HARD);
+
+    fun nextLevel(): CampaignLevel? =
+        entries.firstOrNull { it.levelNumber == levelNumber + 1 }
+
+    companion object {
+        fun fromNumber(levelNumber: Int): CampaignLevel =
+            entries.firstOrNull { it.levelNumber == levelNumber } ?: LEVEL_1
     }
 }
 
@@ -215,11 +257,45 @@ object DotsAndBoxesEngine {
 
     /**
      * Dynamic Minimax search depth:
-     * - Depth 3 for 3x3 grids
-     * - Depth 2 for larger grids (4x4, 5x5, 6x6)
+     * - Depth 3 for small grids (3x3, 4x4)
+     * - Depth 2 for larger grids (5x5, 6x6)
      */
     fun minimaxSearchDepth(boxRows: Int, boxCols: Int): Int =
-        if (boxRows <= 3 && boxCols <= 3) 3 else 2
+        if (boxRows <= 4 && boxCols <= 4) 3 else 2
+
+    /**
+     * Checks whether the given edge coordinate is valid and unclaimed on the board.
+     */
+    fun isEdgeAvailable(state: BoardState, edge: EdgeCoordinate): Boolean {
+        return when (edge.orientation) {
+            EdgeOrientation.HORIZONTAL -> {
+                edge.row in 0 until state.dotRows &&
+                    edge.col in 0 until state.boxCols &&
+                    state.horizontalEdges[edge.row][edge.col] == 0
+            }
+            EdgeOrientation.VERTICAL -> {
+                edge.row in 0 until state.boxRows &&
+                    edge.col in 0 until state.dotCols &&
+                    state.verticalEdges[edge.row][edge.col] == 0
+            }
+        }
+    }
+
+    /**
+     * Forfeits the active player's turn (used when the 5s Blitz timer expires)
+     * and passes control immediately to the next player / Computer opponent.
+     */
+    fun forfeitTurn(state: BoardState): BoardState {
+        if (state.isGameOver) return state
+        val nextPlayer = (state.currentPlayer % state.activePlayerCount) + 1
+        return state.copy(
+            currentPlayer = nextPlayer,
+            currentComboCount = 0,
+            comboChainBoxes = emptySet(),
+            lastCapturedBoxes = emptySet(),
+            hasExtraTurnStreak = false
+        )
+    }
 
     /**
      * Claims an unclaimed horizontal or vertical edge and performs O(1) adjacent-box
