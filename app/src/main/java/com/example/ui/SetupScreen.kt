@@ -35,9 +35,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Contrast
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.GridView
@@ -53,7 +50,6 @@ import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.GridOn
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -61,7 +57,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -93,7 +88,6 @@ import com.example.model.CpuDifficulty
 import com.example.model.GameMode
 import com.example.model.GridSize
 import com.example.model.TimerMode
-import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalGamePalette
 import com.example.viewmodel.MainMenuSection
@@ -102,7 +96,6 @@ import com.example.viewmodel.PlayerSessionStats
 
 @Composable
 fun SetupScreen(
-    themeMode: AppThemeMode,
     soundEnabled: Boolean,
     hapticsEnabled: Boolean,
     totalBoxesCaptured: Int,
@@ -118,8 +111,7 @@ fun SetupScreen(
     sessionStats: Map<Int, PlayerSessionStats>,
     matchHistory: List<MatchHistoryItem>,
     errorResId: Int?,
-    onSelectThemeMode: (AppThemeMode) -> Unit,
-    onSetSoundEnabled: (Boolean) -> Unit,
+    onToggleSound: () -> Unit,
     onToggleHaptics: () -> Unit,
     onClearData: () -> Unit,
     onOpenCredits: () -> Unit,
@@ -134,7 +126,6 @@ fun SetupScreen(
     onSelectPlayerCount: (Int) -> Unit,
     onPlayerInputChange: (Int, String) -> Unit,
     onStartGame: () -> Unit,
-    onOpenHtmlViewer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalGamePalette.current
@@ -425,7 +416,15 @@ fun SetupScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, palette.border, RoundedCornerShape(24.dp)),
+                    .border(
+                        width = 1.5.dp,
+                        color = if (mainMenuSection == MainMenuSection.CAMPAIGN) {
+                            palette.p1Accent.copy(alpha = 0.55f)
+                        } else {
+                            palette.p2Accent.copy(alpha = 0.55f)
+                        },
+                        shape = RoundedCornerShape(24.dp)
+                    ),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = palette.surface.copy(alpha = 0.94f))
             ) {
@@ -464,82 +463,15 @@ fun SetupScreen(
                             onStartGame = onStartGame
                         )
                     }
-
-                    // Theme Picker ('Classic Dark' vs 'High Contrast') & Sound Engine Toggle
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.theme_picker_label),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = palette.mutedText
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ModeTogglePill(
-                                title = stringResource(R.string.theme_classic_dark),
-                                icon = Icons.Filled.DarkMode,
-                                isSelected = themeMode == AppThemeMode.CLASSIC_DARK,
-                                accentColor = palette.p1Accent,
-                                testTag = "theme_classic_dark_button",
-                                onClick = { onSelectThemeMode(AppThemeMode.CLASSIC_DARK) },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            ModeTogglePill(
-                                title = stringResource(R.string.theme_high_contrast),
-                                icon = Icons.Filled.Contrast,
-                                isSelected = themeMode == AppThemeMode.HIGH_CONTRAST,
-                                accentColor = palette.p2Accent,
-                                testTag = "theme_high_contrast_button",
-                                onClick = { onSelectThemeMode(AppThemeMode.HIGH_CONTRAST) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Text(
-                            text = stringResource(R.string.sound_effects_label),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = palette.mutedText
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ModeTogglePill(
-                                title = stringResource(R.string.sound_on),
-                                icon = Icons.Filled.VolumeUp,
-                                isSelected = soundEnabled,
-                                accentColor = palette.p3Accent,
-                                testTag = "sound_on_button",
-                                onClick = { onSetSoundEnabled(true) },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            ModeTogglePill(
-                                title = stringResource(R.string.sound_muted),
-                                icon = Icons.Filled.VolumeOff,
-                                isSelected = !soundEnabled,
-                                accentColor = palette.p2Accent,
-                                testTag = "sound_mute_button",
-                                onClick = { onSetSoundEnabled(false) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
                 }
             }
 
-            // 5. Persistent Session Stats, Match History (Last 5), & Web HTML Card
+            // 5. Persistent Session Stats & Match History (Last 5) Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, palette.border, RoundedCornerShape(20.dp)),
+                    .border(1.dp, palette.border, RoundedCornerShape(20.dp))
+                    .testTag("dashboard_stats_history_card"),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = palette.surface.copy(alpha = 0.94f))
             ) {
@@ -553,25 +485,44 @@ fun SetupScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = stringResource(R.string.session_stats_title).uppercase(),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = palette.mutedText
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.EmojiEvents,
+                                contentDescription = null,
+                                tint = palette.streakAccent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.session_stats_title).uppercase(),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = palette.mutedText
+                            )
+                        }
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             for (pNum in 1..activeCount) {
                                 val stat = sessionStats[pNum] ?: PlayerSessionStats()
                                 val label = if (isCpuMode && pNum == 2) "CPU" else "P$pNum"
+                                val accent = when (pNum) {
+                                    1 -> palette.p1Accent
+                                    2 -> palette.p2Accent
+                                    3 -> palette.p3Accent
+                                    else -> palette.p4Accent
+                                }
                                 Text(
                                     text = "$label: ${stat.wins}W-${stat.losses}L",
                                     style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMonoFontFamily,
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = palette.primaryText
+                                    color = accent
                                 )
                             }
                         }
@@ -582,19 +533,33 @@ fun SetupScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.History,
-                                contentDescription = null,
-                                tint = palette.p2Accent,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.History,
+                                    contentDescription = null,
+                                    tint = palette.p2Accent,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = stringResource(R.string.match_history_title).uppercase(),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = palette.mutedText
+                                )
+                            }
                             Text(
-                                text = stringResource(R.string.match_history_title).uppercase(),
+                                text = "${matchHistory.size} / 5",
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold
+                                    fontFamily = JetBrainsMonoFontFamily
                                 ),
                                 color = palette.mutedText
                             )
@@ -628,7 +593,9 @@ fun SetupScreen(
                                     ) {
                                         Text(
                                             text = "#${item.matchNumber} (${item.gridSizeLabel}) • ${item.scoreSummary}",
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMonoFontFamily
+                                            ),
                                             color = palette.primaryText
                                         )
                                         Text(
@@ -643,49 +610,10 @@ fun SetupScreen(
                             }
                         }
                     }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = null,
-                            tint = palette.p1Accent,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.rules_summary),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = palette.mutedText
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = onOpenHtmlViewer,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("open_html_viewer_button"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primaryText)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Code,
-                            contentDescription = null,
-                            tint = palette.p2Accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text(
-                            text = stringResource(R.string.html_dialog_title),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
                 }
             }
 
-            // 6. Settings Row at Bottom: Small icon buttons for Haptics (On/Off), Clear Data, and Info/Credits
+            // 6. Settings Row at Bottom: Icon buttons for Haptics (On/Off), Audio SFX (On/Off), Clear Data, and Info/Credits
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -697,7 +625,7 @@ fun SetupScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -706,10 +634,10 @@ fun SetupScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(onClick = onToggleHaptics)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
                             .testTag("haptics_toggle_button"),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         IconButton(
                             onClick = onToggleHaptics,
@@ -738,15 +666,52 @@ fun SetupScreen(
                         )
                     }
 
+                    // Audio SFX (On/Off) Icon Button
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = onToggleSound)
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("sound_toggle_button"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        IconButton(
+                            onClick = onToggleSound,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (soundEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                                contentDescription = if (soundEnabled) {
+                                    stringResource(R.string.sound_on)
+                                } else {
+                                    stringResource(R.string.sound_muted)
+                                },
+                                tint = if (soundEnabled) palette.p3Accent else palette.mutedText
+                            )
+                        }
+                        Text(
+                            text = if (soundEnabled) {
+                                stringResource(R.string.sound_on)
+                            } else {
+                                stringResource(R.string.sound_muted)
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = if (soundEnabled) palette.p3Accent else palette.mutedText
+                        )
+                    }
+
                     // Clear Data Icon Button
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(onClick = onClearData)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
                             .testTag("clear_data_button"),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         IconButton(
                             onClick = onClearData,
@@ -772,10 +737,10 @@ fun SetupScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(onClick = onOpenCredits)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
                             .testTag("info_credits_button"),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         IconButton(
                             onClick = onOpenCredits,
@@ -1497,8 +1462,8 @@ private fun QuickMatchConfigSection(
                 .testTag("start_game_button"),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = palette.p1Accent,
-                contentColor = Color.Black
+                containerColor = palette.p2Accent,
+                contentColor = Color.White
             )
         ) {
             Icon(

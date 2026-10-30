@@ -52,21 +52,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Contrast
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -76,7 +72,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -141,8 +136,8 @@ import kotlin.math.sin
 
 @Composable
 fun GameScreen(
-    themeMode: AppThemeMode,
     soundEnabled: Boolean,
+    hapticsEnabled: Boolean,
     activeCampaignLevel: CampaignLevel?,
     justUnlockedNextCampaignLevel: Boolean,
     selectedGridSize: GridSize,
@@ -162,15 +157,14 @@ fun GameScreen(
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onSelectTimerMode: (TimerMode) -> Unit,
     onAdvanceToNextCampaignLevel: () -> Unit,
-    onToggleTheme: () -> Unit,
     onToggleSound: () -> Unit,
+    onToggleHaptics: () -> Unit,
     onEdgeHover: (EdgeCoordinate?) -> Unit,
     onEdgeClick: (EdgeCoordinate) -> Unit,
     onAdjustZoom: (Float) -> Unit,
     onSetZoom: (Float) -> Unit,
     onRestartMatch: () -> Unit,
     onReturnToSetup: () -> Unit,
-    onOpenHtmlViewer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalGamePalette.current
@@ -311,6 +305,9 @@ fun GameScreen(
             .padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
+        // Subtle drifting cyan and magenta arcade dots in background
+        DriftingNeonDotsBackground()
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -324,14 +321,13 @@ fun GameScreen(
         ) {
             // Top Utility & Progress Bar
             TopGameToolbar(
-                themeMode = themeMode,
                 soundEnabled = soundEnabled,
+                hapticsEnabled = hapticsEnabled,
                 claimedBoxes = boardState.totalClaimedBoxes,
                 totalBoxes = boardState.totalBoxes,
-                onToggleTheme = onToggleTheme,
                 onToggleSound = onToggleSound,
-                onReturnToSetup = onReturnToSetup,
-                onOpenHtmlViewer = onOpenHtmlViewer
+                onToggleHaptics = onToggleHaptics,
+                onReturnToSetup = onReturnToSetup
             )
 
             // Top Score Trackers (Cyan vs Magenta) + Blitz 5s Diminishing Progress Bar
@@ -1068,14 +1064,13 @@ private fun BoardZoomToolbar(
 
 @Composable
 private fun TopGameToolbar(
-    themeMode: AppThemeMode,
     soundEnabled: Boolean,
+    hapticsEnabled: Boolean,
     claimedBoxes: Int,
     totalBoxes: Int,
-    onToggleTheme: () -> Unit,
     onToggleSound: () -> Unit,
-    onReturnToSetup: () -> Unit,
-    onOpenHtmlViewer: () -> Unit
+    onToggleHaptics: () -> Unit,
+    onReturnToSetup: () -> Unit
 ) {
     val palette = LocalGamePalette.current
 
@@ -1089,7 +1084,7 @@ private fun TopGameToolbar(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primaryText),
             modifier = Modifier
-                .height(44.dp)
+                .height(48.dp)
                 .testTag("back_to_setup_button")
         ) {
             Icon(
@@ -1116,7 +1111,7 @@ private fun TopGameToolbar(
             LinearProgressIndicator(
                 progress = { if (totalBoxes > 0) claimedBoxes.toFloat() / totalBoxes else 0f },
                 modifier = Modifier
-                    .width(84.dp)
+                    .width(96.dp)
                     .height(5.dp)
                     .clip(RoundedCornerShape(50)),
                 color = palette.p1Accent,
@@ -1129,29 +1124,29 @@ private fun TopGameToolbar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
-                onClick = onToggleTheme,
+                onClick = onToggleHaptics,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(palette.surfaceElevated)
                     .border(1.dp, palette.border, RoundedCornerShape(12.dp))
-                    .testTag("game_theme_toggle_button")
+                    .testTag("game_haptics_toggle_button")
             ) {
                 Icon(
-                    imageVector = if (themeMode == AppThemeMode.CLASSIC_DARK) {
-                        Icons.Filled.DarkMode
+                    imageVector = Icons.Filled.Vibration,
+                    contentDescription = if (hapticsEnabled) {
+                        stringResource(R.string.settings_haptics_on)
                     } else {
-                        Icons.Filled.Contrast
+                        stringResource(R.string.settings_haptics_off)
                     },
-                    contentDescription = stringResource(R.string.theme_picker_label),
-                    tint = palette.p1Accent
+                    tint = if (hapticsEnabled) palette.p1Accent else palette.mutedText
                 )
             }
 
             IconButton(
                 onClick = onToggleSound,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(palette.surfaceElevated)
                     .border(1.dp, palette.border, RoundedCornerShape(12.dp))
@@ -1161,22 +1156,6 @@ private fun TopGameToolbar(
                     imageVector = if (soundEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
                     contentDescription = stringResource(R.string.sound_effects_label),
                     tint = if (soundEnabled) palette.p3Accent else palette.mutedText
-                )
-            }
-
-            IconButton(
-                onClick = onOpenHtmlViewer,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(palette.surfaceElevated)
-                    .border(1.dp, palette.border, RoundedCornerShape(12.dp))
-                    .testTag("game_html_viewer_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Code,
-                    contentDescription = stringResource(R.string.view_html_button),
-                    tint = palette.p2Accent
                 )
             }
         }
@@ -2513,92 +2492,4 @@ private fun FullScreenVictoryAnimationOverlay(
             }
         }
     }
-}
-
-
-@Composable
-fun SingleFileHtmlDialog(
-    onDismiss: () -> Unit
-) {
-    val palette = LocalGamePalette.current
-    val context = LocalContext.current
-    val htmlContent = remember {
-        runCatching {
-            context.assets.open("index.html").bufferedReader().use { it.readText() }
-        }.getOrDefault("<!-- index.html not found -->")
-    }
-    val copiedToastText = stringResource(R.string.copied_toast)
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        titleContentColor = palette.primaryText,
-        textContentColor = palette.primaryText,
-        title = {
-            Text(
-                text = stringResource(R.string.html_dialog_title),
-                style = MaterialTheme.typography.titleMedium
-            )
-        },
-        text = {
-            Surface(
-                color = palette.backgroundDeep,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(340.dp)
-                    .border(1.dp, palette.border, RoundedCornerShape(12.dp))
-            ) {
-                val vScroll = rememberScrollState()
-                val hScroll = rememberScrollState()
-                Text(
-                    text = htmlContent,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 11.sp,
-                        lineHeight = 16.sp
-                    ),
-                    color = palette.primaryText,
-                    modifier = Modifier
-                        .verticalScroll(vScroll)
-                        .horizontalScroll(hScroll)
-                        .padding(12.dp)
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val clipboard =
-                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("index.html", htmlContent))
-                    Toast.makeText(context, copiedToastText, Toast.LENGTH_SHORT).show()
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = palette.p1Accent,
-                    contentColor = Color.Black
-                ),
-                modifier = Modifier.testTag("copy_html_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ContentCopy,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = stringResource(R.string.copy_html_button))
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag("close_html_dialog_button")
-            ) {
-                Text(
-                    text = stringResource(R.string.close_button),
-                    color = palette.mutedText
-                )
-            }
-        }
-    )
 }

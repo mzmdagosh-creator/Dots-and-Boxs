@@ -21,7 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.CreditsScreen
 import com.example.ui.GameScreen
 import com.example.ui.SetupScreen
-import com.example.ui.SingleFileHtmlDialog
+import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.GameViewModel
 import com.example.viewmodel.ScreenDestination
@@ -48,7 +48,8 @@ fun DotsAndBoxesApp(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    MyApplicationTheme(themeMode = uiState.themeMode) {
+    // Strictly enforce the Neon Arcade Dark Theme across the entire application
+    MyApplicationTheme(themeMode = AppThemeMode.CLASSIC_DARK) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets.safeDrawing
@@ -58,12 +59,11 @@ fun DotsAndBoxesApp(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                label = "screenTransition"
+                label = "neonArcadeScreenTransition"
             ) { destination ->
                 when (destination) {
                     ScreenDestination.SETUP -> {
                         SetupScreen(
-                            themeMode = uiState.themeMode,
                             soundEnabled = uiState.soundEnabled,
                             hapticsEnabled = uiState.hapticsEnabled,
                             totalBoxesCaptured = uiState.totalBoxesCaptured,
@@ -79,8 +79,7 @@ fun DotsAndBoxesApp(
                             sessionStats = uiState.sessionStats,
                             matchHistory = uiState.matchHistory,
                             errorResId = uiState.setupErrorResId,
-                            onSelectThemeMode = viewModel::selectThemeMode,
-                            onSetSoundEnabled = viewModel::setSoundEnabled,
+                            onToggleSound = viewModel::toggleSound,
                             onToggleHaptics = viewModel::toggleHaptics,
                             onClearData = viewModel::clearPersistentData,
                             onOpenCredits = viewModel::openCreditsScreen,
@@ -99,8 +98,7 @@ fun DotsAndBoxesApp(
                                     emptyErrorResId = R.string.error_empty_letter,
                                     sameLetterErrorResId = R.string.error_same_letter
                                 )
-                            },
-                            onOpenHtmlViewer = { viewModel.toggleHtmlDialog(true) }
+                            }
                         )
                     }
 
@@ -112,8 +110,8 @@ fun DotsAndBoxesApp(
 
                     ScreenDestination.GAME -> {
                         GameScreen(
-                            themeMode = uiState.themeMode,
                             soundEnabled = uiState.soundEnabled,
+                            hapticsEnabled = uiState.hapticsEnabled,
                             activeCampaignLevel = uiState.activeCampaignLevel,
                             justUnlockedNextCampaignLevel = uiState.justUnlockedNextCampaignLevel,
                             selectedGridSize = uiState.selectedGridSize,
@@ -133,24 +131,17 @@ fun DotsAndBoxesApp(
                             onSelectCpuDifficulty = viewModel::selectCpuDifficulty,
                             onSelectTimerMode = viewModel::selectTimerMode,
                             onAdvanceToNextCampaignLevel = viewModel::advanceToNextCampaignLevel,
-                            onToggleTheme = viewModel::toggleThemeMode,
                             onToggleSound = viewModel::toggleSound,
+                            onToggleHaptics = viewModel::toggleHaptics,
                             onEdgeHover = viewModel::onEdgeHovered,
                             onEdgeClick = viewModel::onEdgeClicked,
                             onAdjustZoom = viewModel::adjustZoom,
                             onSetZoom = viewModel::setZoom,
                             onRestartMatch = viewModel::restartMatch,
-                            onReturnToSetup = viewModel::returnToSetup,
-                            onOpenHtmlViewer = { viewModel.toggleHtmlDialog(true) }
+                            onReturnToSetup = viewModel::returnToSetup
                         )
                     }
                 }
-            }
-
-            if (uiState.showHtmlDialog) {
-                SingleFileHtmlDialog(
-                    onDismiss = { viewModel.toggleHtmlDialog(false) }
-                )
             }
         }
     }
