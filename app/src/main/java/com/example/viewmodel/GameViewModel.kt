@@ -772,7 +772,7 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * Forfeits the player's turn when the 5-second Blitz timer expires and triggers the CPU turn immediately.
+     * Forfeits the player's turn when the 5-second Blitz timer expires and executes the AI move instantly.
      */
     fun onBlitzTimeoutForfeitTurn() {
         val currentBoard = _uiState.value.boardState
@@ -795,7 +795,22 @@ class GameViewModel : ViewModel() {
         }
 
         if (forfeitedBoard.isCurrentPlayerAi) {
-            scheduleCpuTurnIfNeeded(immediateFirstMove = true)
+            val cpuEdge = DotsAndBoxesEngine.cpuTakeTurn(
+                state = forfeitedBoard,
+                difficulty = forfeitedBoard.cpuDifficulty
+            )
+            if (cpuEdge != null) {
+                val outcome = DotsAndBoxesEngine.makeMove(forfeitedBoard, cpuEdge)
+                if (outcome != null) {
+                    applyMoveOutcomeWithAudioAndStats(outcome, wasHumanMove = false)
+                    _uiState.update { it.copy(lastTurnForfeitedByTimeout = true) }
+                }
+            }
+            if (_uiState.value.boardState.isCurrentPlayerAi && !_uiState.value.boardState.isGameOver) {
+                scheduleCpuTurnIfNeeded(immediateFirstMove = false)
+            } else if (!_uiState.value.boardState.isGameOver) {
+                restartBlitzTimerIfNeeded()
+            }
         } else {
             restartBlitzTimerIfNeeded()
         }

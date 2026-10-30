@@ -11,9 +11,9 @@ enum class AppThemeMode {
 }
 
 // Classic Dark Palette Constants
-val ObsidianBackground = Color(0xFF0A0E17)
-val SlateSurface = Color(0xFF121826)
-val SlateSurfaceElevated = Color(0xFF1C2536)
+val ObsidianBackground = Color(0xFF121212)
+val SlateSurface = Color(0xFF1A1E29)
+val SlateSurfaceElevated = Color(0xFF222838)
 val SlateBorder = Color(0xFF2E3A52)
 val DotWhite = Color(0xFFFFFFFF)
 val MutedText = Color(0xFF94A3B8)
@@ -40,7 +40,7 @@ val Player4VioletFill = Color(0x66A855F7)
 
 val StreakAmber = Color(0xFFFACC15)
 // Unselected lines: faint grey at 20% opacity
-val UnclaimedEdgeIdle = Color(0x33FFFFFF) // 20% opacity white/grey (0x33 = 51/255 = 0.20)
+val UnclaimedEdgeIdle = Color(0x339E9E9E) // 20% opacity faint grey
 val UnclaimedEdgeHover = Color(0x66FFFFFF)
 
 // High Contrast Light Palette Constants

@@ -36,9 +36,6 @@
     <string name="credits_framework">Framework: Kotlin &amp; Jetpack Compose via Google AI Studio</string>
     <string name="credits_build_pipeline">Build Pipeline: Cloud CI/CD Assembly</string>
     <string name="credits_back_button">Back</string>
-    <string name="theme_picker_label">Theme Picker</string>
-    <string name="theme_classic_dark">Classic Dark</string>
-    <string name="theme_high_contrast">High Contrast</string>
     <string name="sound_effects_label">Sound Engine</string>
     <string name="sound_on">SFX On</string>
     <string name="sound_muted">Muted</string>

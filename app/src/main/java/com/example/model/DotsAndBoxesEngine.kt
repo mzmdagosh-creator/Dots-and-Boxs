@@ -12,8 +12,8 @@ import kotlin.math.min
  *   - `MEDIUM`: Greedy and Safe approach. Completes any 3-sided box if available; otherwise strictly
  *     avoids drawing the 3rd line of any box; picks randomly if no safe moves exist.
  *   - `HARD`: Minimax algorithm with Alpha-Beta Pruning looking ahead to maximize the computer's
- *     score while minimizing the player's score, using dynamic depth (depth 3 for 3x3 grids,
- *     depth 2 for larger grids 4x4, 5x5, 6x6).
+ *     score while minimizing the player's score, using dynamic depth (depth 3 for grids up to 4x4,
+ *     depth 2 for 5x5+).
  */
 enum class EdgeOrientation {
     HORIZONTAL,
@@ -407,7 +407,7 @@ object DotsAndBoxesEngine {
      * - `EASY`: Selects a valid un-drawn line completely at random.
      * - `MEDIUM`: Greedy and Safe approach. Always completes a 3-sided box if available.
      *   Otherwise, strictly avoids drawing the 3rd line of any box. Picks randomly if no safe moves exist.
-     * - `HARD`: Minimax algorithm with Alpha-Beta Pruning (depth 3 for 3x3 grids, depth 2 for larger grids).
+     * - `HARD`: Minimax algorithm with Alpha-Beta Pruning (depth 3 for grids up to 4x4, depth 2 for 5x5+).
      */
     fun cpuTakeTurn(
         state: BoardState,
@@ -484,8 +484,8 @@ object DotsAndBoxesEngine {
     /**
      * Hard: Minimax algorithm with Alpha-Beta Pruning.
      * Uses dynamic search depth:
-     * - Depth 3 for 3x3 grids (`boxRows == 3 && boxCols == 3`)
-     * - Depth 2 for larger grids (`4x4`, `5x5`, `6x6`)
+     * - Depth 3 for grids up to 4x4 (`boxRows <= 4 && boxCols <= 4`)
+     * - Depth 2 for larger grids (`5x5`, `6x6`)
      */
     private fun chooseHardMinimaxMove(
         state: BoardState,
