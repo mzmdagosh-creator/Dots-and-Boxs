@@ -432,6 +432,232 @@ private fun NeonArcadeHeader(
                         ArcadeMagenta.copy(alpha = glowAlpha)
                     )
                 ),
+                shape = RoundedCornerShape(22EdgeHovered,
+                            onEdgeClick = viewModel::onEdgeClicked,
+                            onAdjustZoom = viewModel::adjustZoom,
+                            onSetZoom = viewModel::setZoom,
+                            onRestartMatch = viewModel::restartMatch,
+                            onReturnToSetup = viewModel::returnToSetup
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Main Menu UI (Strictly "Neon Arcade Dashboard"):
+ * - Pure dark mode background (`Color(0xFF121212)`) with a subtle floating dots animation.
+ * - Glowing neon header "DOTS & BOXES".
+ * - Stats displaying "Total Boxes Captured" and "Tournament Level Reached" (from SharedPreferences).
+ * - Two large glowing action buttons: Cyan "Resume Tournament" and Magenta "Custom Arcade".
+ */
+@Composable
+fun NeonArcadeDashboard(
+    totalBoxesCaptured: Int = 0,
+    unlockedCampaignLevel: Int = 1,
+    selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
+    mainMenuSection: MainMenuSection = MainMenuSection.CAMPAIGN,
+    selectedGameMode: GameMode = GameMode.CPU,
+    selectedGridSize: GridSize = GridSize.SIZE_4X4,
+    selectedCpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
+    selectedTimerMode: TimerMode = TimerMode.RELAXED,
+    selectedPlayerCount: Int = 1,
+    playerInputs: List<String> = listOf("A", "C", "D", "E"),
+    sessionStats: Map<Int, PlayerSessionStats> = emptyMap(),
+    matchHistory: List<MatchHistoryItem> = emptyList(),
+    errorResId: Int? = null,
+    onResumeTournament: () -> Unit = {},
+    onSelectMainMenuSection: (MainMenuSection) -> Unit = {},
+    onSelectCampaignLevel: (CampaignLevel) -> Unit = {},
+    onStartCampaignLevel: (CampaignLevel) -> Unit = {},
+    onSelectGameMode: (GameMode) -> Unit = {},
+    onSelectGridSize: (GridSize) -> Unit = {},
+    onSelectCpuDifficulty: (CpuDifficulty) -> Unit = {},
+    onSelectTimerMode: (TimerMode) -> Unit = {},
+    onSelectPlayerCount: (Int) -> Unit = {},
+    onPlayerInputChange: (Int, String) -> Unit = { _, _ -> },
+    onStartCustomGame: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val scrollState = rememberScrollState()
+    val infiniteTransition = rememberInfiniteTransition(label = "neonArcadeTransition")
+    val headerGlow by infiniteTransition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "headerGlow"
+    )
+    val driftProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 24000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "floatingDotsDrift"
+    )
+
+    val floatingDots = remember {
+        listOf(
+            FloatingDotParticle(0.10f, 0.12f, 5.0f, 1.0f, 1.0f, 0.00f, true, 0.24f),
+            FloatingDotParticle(0.26f, 0.22f, 3.8f, -1.0f, 1.0f, 0.14f, false, 0.22f),
+            FloatingDotParticle(0.45f, 0.09f, 5.4f, 1.0f, -1.0f, 0.28f, true, 0.20f),
+            FloatingDotParticle(0.68f, 0.18f, 4.2f, -1.0f, -1.0f, 0.42f, false, 0.24f),
+            FloatingDotParticle(0.88f, 0.14f, 5.2f, 1.0f, 1.0f, 0.56f, true, 0.19f),
+            FloatingDotParticle(0.15f, 0.42f, 4.6f, -1.0f, 1.0f, 0.70f, false, 0.22f),
+            FloatingDotParticle(0.35f, 0.48f, 3.5f, 1.0f, -1.0f, 0.84f, true, 0.20f),
+            FloatingDotParticle(0.58f, 0.39f, 5.6f, -1.0f, 1.0f, 0.18f, false, 0.20f),
+            FloatingDotParticle(0.82f, 0.46f, 4.0f, 1.0f, 1.0f, 0.33f, true, 0.24f),
+            FloatingDotParticle(0.12f, 0.72f, 5.0f, 1.0f, -1.0f, 0.49f, true, 0.22f),
+            FloatingDotParticle(0.32f, 0.81f, 4.2f, -1.0f, -1.0f, 0.63f, false, 0.23f),
+            FloatingDotParticle(0.54f, 0.68f, 5.2f, 1.0f, 1.0f, 0.77f, true, 0.19f),
+            FloatingDotParticle(0.75f, 0.78f, 4.4f, -1.0f, 1.0f, 0.91f, false, 0.24f),
+            FloatingDotParticle(0.90f, 0.86f, 3.8f, 1.0f, -1.0f, 0.25f, true, 0.21f)
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF121212))
+            .testTag("main_menu_dashboard"),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        // Subtle floating neon dots animation over pure dark Color(0xFF121212)
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("drifting_neon_dots_background")
+        ) {
+            val width = size.width
+            val height = size.height
+            if (width <= 0f || height <= 0f) return@Canvas
+
+            val angle = driftProgress * 2f * PI.toFloat()
+            floatingDots.forEach { dot ->
+                val phaseAngle = angle + dot.phaseOffset * 2f * PI.toFloat()
+                val offsetX = cos(phaseAngle * dot.speedX) * (width * 0.045f)
+                val offsetY = sin(phaseAngle * dot.speedY) * (height * 0.045f)
+
+                val centerX = ((dot.xFraction * width + offsetX) % width + width) % width
+                val centerY = ((dot.yFraction * height + offsetY) % height + height) % height
+                val dotColor = if (dot.isCyan) ArcadeCyan else ArcadeMagenta
+                val radiusPx = dot.radiusDp.dp.toPx()
+
+                drawCircle(
+                    color = dotColor.copy(alpha = dot.baseAlpha * 0.4f),
+                    radius = radiusPx * 2.5f,
+                    center = Offset(centerX, centerY)
+                )
+                drawCircle(
+                    color = dotColor.copy(alpha = dot.baseAlpha),
+                    radius = radiusPx,
+                    center = Offset(centerX, centerY)
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 580.dp)
+                .verticalScroll(scrollState)
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header: Glowing neon title "DOTS & BOXES"
+            NeonArcadeHeader(glowAlpha = headerGlow)
+
+            // Stats: "Total Boxes Captured" and "Tournament Level Reached" (read from SharedPreferences)
+            NeonArcadeStatsRow(
+                totalBoxesCaptured = totalBoxesCaptured,
+                unlockedCampaignLevel = unlockedCampaignLevel,
+                totalCampaignLevels = CampaignLevel.entries.size
+            )
+
+            // Main Actions: Two large glowing buttons (Cyan "Resume Tournament" & Magenta "Custom Arcade")
+            NeonArcadeMainActions(
+                mainMenuSection = mainMenuSection,
+                unlockedCampaignLevel = unlockedCampaignLevel,
+                glowAlpha = headerGlow,
+                onResumeTournamentClick = {
+                    onSelectMainMenuSection(MainMenuSection.CAMPAIGN)
+                    onResumeTournament()
+                },
+                onCustomArcadeClick = {
+                    if (mainMenuSection != MainMenuSection.QUICK_MATCH) {
+                        onSelectMainMenuSection(MainMenuSection.QUICK_MATCH)
+                    } else {
+                        onStartCustomGame()
+                    }
+                }
+            )
+
+            // Tournament Campaign Mode (Levels 1..6 sequentially unlocked via SharedPreferences)
+            AnimatedVisibility(visible = mainMenuSection == MainMenuSection.CAMPAIGN) {
+                TournamentList(
+                    unlockedCampaignLevel = unlockedCampaignLevel,
+                    selectedCampaignLevel = selectedCampaignLevel,
+                    onSelectCampaignLevel = onSelectCampaignLevel,
+                    onStartCampaignLevel = onStartCampaignLevel
+                )
+            }
+
+            // Custom Arcade Mode & Blitz Timer (3x3 to 6x6, Easy/Medium/Hard, 5s Blitz Mode toggle)
+            AnimatedVisibility(visible = mainMenuSection == MainMenuSection.QUICK_MATCH) {
+                CustomArcadeConfigPanel(
+                    selectedGridSize = selectedGridSize,
+                    selectedGameMode = selectedGameMode,
+                    selectedCpuDifficulty = selectedCpuDifficulty,
+                    selectedTimerMode = selectedTimerMode,
+                    selectedPlayerCount = selectedPlayerCount,
+                    playerInputs = playerInputs,
+                    errorResId = errorResId,
+                    onSelectGridSize = onSelectGridSize,
+                    onSelectGameMode = onSelectGameMode,
+                    onSelectCpuDifficulty = onSelectCpuDifficulty,
+                    onSelectTimerMode = onSelectTimerMode,
+                    onSelectPlayerCount = onSelectPlayerCount,
+                    onPlayerInputChange = onPlayerInputChange,
+                    onStartGame = onStartCustomGame
+                )
+            }
+
+            // Session Stats & Match History
+            DashboardSessionHistoryCard(
+                isCpuMode = selectedGameMode == GameMode.CPU,
+                selectedPlayerCount = selectedPlayerCount,
+                sessionStats = sessionStats,
+                matchHistory = matchHistory
+            )
+        }
+    }
+}
+
+@Composable
+private fun NeonArcadeHeader(
+    glowAlpha: Float,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(ArcadeCardSurface)
+            .border(
+                width = 1.5.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        ArcadeCyan.copy(alpha = glowAlpha),
+                        ArcadeMagenta.copy(alpha = glowAlpha)
+                    )
+                ),
                 shape = RoundedCornerShape(22.dp)
             )
             .padding(horizontal = 20.dp, vertical = 18.dp),
