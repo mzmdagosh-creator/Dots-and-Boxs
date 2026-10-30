@@ -1212,6 +1212,15 @@ object DotsAndBoxesEngine {
 // 4. VIEWMODEL & SHAREDPREFERENCES STATE MANAGEMENT
 // ============================================================================
 
+enum class AchievementProtocol(val id: String, val title: String, val description: String, val isSecret: Boolean = false) {
+    INITIATION("ach_initiation", "Initiation", "Clear Campaign Level 1"),
+    TURING_TEST("ach_turing_test", "Turing Test Passed", "Defeat the Hard AI (Minimax) in a Quick Match"),
+    CHAIN_REACTION("ach_chain_reaction", "Chain Reaction", "Capture 4 or more nodes in a single unbroken turn"),
+    GHOST_IN_MACHINE("ach_ghost_machine", "Ghost in the Machine", "Shut out the CPU (Win a match where the AI scores 0)"),
+    GRID_MASTER("ach_grid_master", "Grid Master", "Play a total of 50 matches"),
+    SYSTEM_FREEZE("ach_system_freeze", "System Freeze", "Win a Blitz match without letting the timer drop below 50%", true)
+
+
 enum class ScreenDestination {
     SETUP,          // Screen 1: The Command Center (Main Menu)
     QUICK_CONFIG,   // Screen 3: Quick Match Config
@@ -1252,6 +1261,9 @@ data class MatchHistoryItem(
 
 data class GameUiState(
     val currentScreen: ScreenDestination = ScreenDestination.SETUP,
+    val unlockedAchievements: Set<String> = emptySet(),
+    val achievementToastQueue: List<AchievementProtocol> = emptyList(),
+
     val mainMenuSection: MainMenuSection = MainMenuSection.CAMPAIGN,
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
@@ -1295,7 +1307,7 @@ data class GameUiState(
 
 class GameViewModel : ViewModel() {
 
-    companion object {
+        companion object {
         const val PREFS_NAME = "dots_and_boxes_campaign_prefs"
         const val KEY_UNLOCKED_LEVEL = "unlocked_campaign_level"
         const val KEY_TOTAL_BOXES_CAPTURED = "total_boxes_captured"
@@ -1303,7 +1315,9 @@ class GameViewModel : ViewModel() {
         const val KEY_SESSION_STATS_JSON = "dots_and_boxes_session_stats"
         const val KEY_MATCH_HISTORY_JSON = "dots_and_boxes_match_history"
         const val KEY_TOTAL_MATCHES = "dots_and_boxes_total_matches"
+        const val KEY_UNLOCKED_ACHIEVEMENTS = "dots_and_boxes_achievements"
     }
+
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
