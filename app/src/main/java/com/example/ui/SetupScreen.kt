@@ -491,7 +491,7 @@ fun CustomArcadeConfigPanel(
                         )
                         Column {
                             Text(
-                                text = "Blitz Mode (5s Timer)",
+                                text = "Blitz Mode (5s)",
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold
                                 ),

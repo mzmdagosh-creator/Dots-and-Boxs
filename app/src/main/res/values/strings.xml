@@ -19,8 +19,8 @@
     <string name="campaign_completed_banner">CHAMPION! ALL 6 TOURNAMENT LEVELS CLEARED!</string>
     <string name="next_level_button">Next Level</string>
     <string name="victory_overlay_subtitle">MATCH COMPLETE • CHAMPION DECLARED</string>
-    <string name="timer_mode_label">Blitz Mode (5-Second Timer)</string>
-    <string name="timer_blitz_label">Blitz (5s)</string>
+    <string name="timer_mode_label">Blitz Mode (5s)</string>
+    <string name="timer_blitz_label">Blitz Mode (5s)</string>
     <string name="timer_relaxed_label">Relaxed (Off)</string>
     <string name="blitz_countdown_format">BLITZ TIMER: %1$.1fs</string>
     <string name="blitz_forfeit_notice">Time expired! Turn forfeited to Computer.</string>

@@ -202,6 +202,7 @@ fun DotsAndBoxesApp(
                             onSelectGridSize = viewModel::selectGridSize,
                             onSelectCpuDifficulty = viewModel::selectCpuDifficulty,
                             onSelectTimerMode = viewModel::selectTimerMode,
+                            onBlitzTimeout = viewModel::onBlitzTimeoutForfeitTurn,
                             onAdvanceToNextCampaignLevel = viewModel::advanceToNextCampaignLevel,
                             onToggleSound = viewModel::toggleSound,
                             onToggleHaptics = viewModel::toggleHaptics,

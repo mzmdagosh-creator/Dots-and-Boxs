@@ -77,6 +77,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -93,6 +94,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -112,6 +114,7 @@ import com.example.model.BoardState
 import com.example.model.BoxCoordinate
 import com.example.model.CampaignLevel
 import com.example.model.CpuDifficulty
+import com.example.model.DotsAndBoxesEngine
 import com.example.model.EdgeCoordinate
 import com.example.model.EdgeOrientation
 import com.example.model.GridSize
@@ -127,6 +130,7 @@ import com.example.viewmodel.HapticEventType
 import com.example.viewmodel.MatchHistoryItem
 import com.example.viewmodel.PlayerSessionStats
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -156,6 +160,7 @@ fun GameScreen(
     onSelectGridSize: (GridSize) -> Unit,
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onSelectTimerMode: (TimerMode) -> Unit,
+    onBlitzTimeout: () -> Unit = {},
     onAdvanceToNextCampaignLevel: () -> Unit,
     onToggleSound: () -> Unit,
     onToggleHaptics: () -> Unit,
@@ -171,18 +176,67 @@ fun GameScreen(
     val context = LocalContext.current
     val hapticFeedback = LocalHapticFeedback.current
 
+    val isBlitzMode = selectedTimerMode == TimerMode.BLITZ
+    val isPlayerTurn = !boardState.isGameOver && !boardState.isCurrentPlayerAi
+    var blitzProgress by remember { mutableFloatStateOf(blitzRemainingFraction.coerceIn(0f, 1f)) }
+    var blitzSecondsLeft by remember { mutableFloatStateOf(blitzRemainingSeconds.coerceIn(0f, 5f)) }
+
+    // Blitz Timer (Time Attack): count down from 5 seconds during the human player's turn
+    LaunchedEffect(isBlitzMode, isPlayerTurn, boardState.totalMovesPlayed, boardState.currentPlayer) {
+        if (isBlitzMode && isPlayerTurn) {
+            val totalDurationMs = 5000L
+            val tickMs = 50L
+            var remainingMs = totalDurationMs
+            blitzProgress = 1f
+            blitzSecondsLeft = 5.0f
+            while (remainingMs > 0L) {
+                delay(tickMs)
+                remainingMs = (remainingMs - tickMs).coerceAtLeast(0L)
+                blitzProgress = remainingMs.toFloat() / totalDurationMs.toFloat()
+                blitzSecondsLeft = remainingMs / 1000f
+            }
+            // Timer hit 0 before the player drew a line: forfeit turn immediately so Computer moves
+            onBlitzTimeout()
+        } else {
+            blitzProgress = 1f
+            blitzSecondsLeft = 5.0f
+        }
+    }
+
+    // Move execution & scoring block with Hardware Haptics
+    val onHumanMoveExecuted: (EdgeCoordinate) -> Unit = { edge ->
+        if (isPlayerTurn && DotsAndBoxesEngine.isEdgeAvailable(boardState, edge)) {
+            val outcome = DotsAndBoxesEngine.makeMove(boardState, edge)
+            if (outcome != null) {
+                // Move execution block: subtle haptic feedback every time a human player draws a line
+                if (hapticsEnabled) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+                // Scoring block: heavy haptic feedback when a 4th wall is completed and a box is captured
+                if (outcome.capturedBoxes.isNotEmpty() && hapticsEnabled) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
+                onEdgeClick(edge)
+            }
+        }
+    }
+
     // Trigger hardware haptic "tick" on line draw and heavier "buzz" on box capture
     LaunchedEffect(lastHapticEvent?.id) {
         val event = lastHapticEvent ?: return@LaunchedEffect
+        if (!hapticsEnabled) return@LaunchedEffect
         when (event.type) {
             HapticEventType.LINE_TICK -> {
-                HapticEngine.triggerLineTick(context, hapticFeedback)
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                HapticEngine.triggerLineTick(context, null)
             }
             HapticEventType.BOX_CAPTURE_BUZZ -> {
-                HapticEngine.triggerBoxCaptureBuzz(context, hapticFeedback, event.capturedCount)
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                HapticEngine.triggerBoxCaptureBuzz(context, null, event.capturedCount)
             }
             HapticEventType.VICTORY_CELEBRATION -> {
-                HapticEngine.triggerVictoryCelebration(context, hapticFeedback)
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                HapticEngine.triggerVictoryCelebration(context, null)
             }
         }
     }
@@ -330,13 +384,13 @@ fun GameScreen(
                 onReturnToSetup = onReturnToSetup
             )
 
-            // Top Score Trackers (Cyan vs Magenta) + Blitz 5s Diminishing Progress Bar
+            // Top Score Trackers (Cyan vs Magenta) + Blitz 5s Diminishing Progress Bar Above Board
             ScoreboardHeader(
                 boardState = boardState,
                 activeCampaignLevel = activeCampaignLevel,
                 selectedTimerMode = selectedTimerMode,
-                blitzRemainingSeconds = blitzRemainingSeconds,
-                blitzRemainingFraction = blitzRemainingFraction,
+                blitzRemainingSeconds = blitzSecondsLeft,
+                blitzRemainingFraction = blitzProgress,
                 lastTurnForfeitedByTimeout = lastTurnForfeitedByTimeout,
                 neonGlowPulse = neonGlowPulse,
                 comboHeartbeatScale = comboHeartbeatScale,
@@ -466,7 +520,7 @@ fun GameScreen(
                                 dotSlotSize = scaledDotSlotSize,
                                 boxSize = scaledBoxSize,
                                 onEdgeHover = onEdgeHover,
-                                onEdgeClick = onEdgeClick
+                                onEdgeClick = onHumanMoveExecuted
                             )
                         }
                     }
@@ -604,7 +658,7 @@ private fun BottomControlsAndFooter(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Row 1: Grid Size Segmented Selector (3x3, 4x4, 5x5, 6x6) + Blitz Timer Toggle
+            // Row 1: Grid Size Segmented Selector (3x3, 4x4, 5x5, 6x6) + Restart Game Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -650,58 +704,48 @@ private fun BottomControlsAndFooter(
                     }
                 }
 
-                val isBlitz = selectedTimerMode == TimerMode.BLITZ
-                Box(
+                Button(
+                    onClick = onRestartMatch,
+                    shape = RoundedCornerShape(9.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = palette.p2Accent,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp,
+                        vertical = 0.dp
+                    ),
                     modifier = Modifier
                         .height(34.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(if (isBlitz) palette.p2Accent else palette.surfaceElevated)
-                        .border(
-                            width = if (isBlitz) 1.5.dp else 1.dp,
-                            color = if (isBlitz) palette.p2Accent else palette.border,
-                            shape = RoundedCornerShape(9.dp)
-                        )
-                        .clickable {
-                            onSelectTimerMode(
-                                if (isBlitz) TimerMode.RELAXED else TimerMode.BLITZ
-                            )
-                        }
-                        .padding(horizontal = 8.dp)
-                        .testTag("game_timer_toggle_button"),
-                    contentAlignment = Alignment.Center
+                        .testTag("restart_match_button")
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isBlitz) Icons.Filled.Timer else Icons.Filled.TimerOff,
-                            contentDescription = stringResource(R.string.timer_mode_label),
-                            tint = if (isBlitz) Color.White else palette.mutedText,
-                            modifier = Modifier.size(13.dp)
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.restart_game_button),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = stringResource(R.string.restart_game_button),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
                         )
-                        Text(
-                            text = if (isBlitz) "Blitz (5s)" else "Relaxed",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp
-                            ),
-                            color = if (isBlitz) Color.White else palette.primaryText
-                        )
-                    }
+                    )
                 }
             }
 
-            // Row 2: CPU Difficulty Toggle (Easy, Medium, Hard) + Restart Game Button
+            // Row 2: CPU Difficulty Selector (Easy, Medium, Hard) + "Blitz Mode (5s)" Toggle right near Difficulty Selector
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(
                     text = if (activeCampaignLevel != null) "LVL ${activeCampaignLevel.levelNumber}:" else "AI:",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
                     ),
                     color = if (activeCampaignLevel != null) palette.p1Accent else palette.mutedText
                 )
@@ -738,40 +782,54 @@ private fun BottomControlsAndFooter(
                         Text(
                             text = label,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
                             ),
                             color = if (isSelected) Color.Black else palette.primaryText
                         )
                     }
                 }
 
-                Button(
-                    onClick = onRestartMatch,
-                    shape = RoundedCornerShape(9.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.p2Accent,
-                        contentColor = Color.White
-                    ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 10.dp,
-                        vertical = 0.dp
-                    ),
+                // UI Toggle for "Blitz Mode (5s)" right near the difficulty selector
+                val isBlitz = selectedTimerMode == TimerMode.BLITZ
+                Box(
                     modifier = Modifier
                         .height(36.dp)
-                        .testTag("restart_match_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = stringResource(R.string.restart_game_button),
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.restart_game_button),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(if (isBlitz) palette.p2Accent else palette.surfaceElevated)
+                        .border(
+                            width = if (isBlitz) 1.5.dp else 1.dp,
+                            color = if (isBlitz) palette.p2Accent else palette.border,
+                            shape = RoundedCornerShape(9.dp)
                         )
-                    )
+                        .clickable {
+                            onSelectTimerMode(
+                                if (isBlitz) TimerMode.RELAXED else TimerMode.BLITZ
+                            )
+                        }
+                        .padding(horizontal = 8.dp)
+                        .testTag("game_timer_toggle_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isBlitz) Icons.Filled.Timer else Icons.Filled.TimerOff,
+                            contentDescription = "Blitz Mode (5s)",
+                            tint = if (isBlitz) Color.White else palette.mutedText,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "Blitz Mode (5s)",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.5.sp
+                            ),
+                            color = if (isBlitz) Color.White else palette.primaryText
+                        )
+                    }
                 }
             }
 
@@ -1260,9 +1318,8 @@ private fun ScoreboardHeader(
                 }
             }
 
-            // Diminishing animated progress bar during the player's turn when Blitz (5s) is active
+            // Shrinking horizontal progress bar above the board during the human player's turn when Blitz Mode (5s) is enabled
             val showBlitzBar = selectedTimerMode == TimerMode.BLITZ &&
-                activeCampaignLevel == null &&
                 !boardState.isGameOver &&
                 !boardState.isCurrentPlayerAi
 

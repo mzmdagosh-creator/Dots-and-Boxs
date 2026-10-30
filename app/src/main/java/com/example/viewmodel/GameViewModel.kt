@@ -372,9 +372,7 @@ class GameViewModel : ViewModel() {
                 lastTurnForfeitedByTimeout = false
             )
         }
-        if (_uiState.value.currentScreen == ScreenDestination.GAME &&
-            _uiState.value.activeCampaignLevel == null
-        ) {
+        if (_uiState.value.currentScreen == ScreenDestination.GAME) {
             restartBlitzTimerIfNeeded()
         }
     }
@@ -718,56 +716,16 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * Runs the 5-second Blitz countdown during the human player's turn in Custom Arcade mode.
-     * If the 5 seconds run out, the player forfeits their turn and the computer immediately takes its turn.
+     * Resets the 5-second Blitz countdown state for the human player's turn.
+     * The active 5-second visual countdown is driven by the `LaunchedEffect` in `GameScreen`.
      */
     private fun restartBlitzTimerIfNeeded() {
         blitzTimerJob?.cancel()
-        val state = _uiState.value
-        val isBlitzActive = state.currentScreen == ScreenDestination.GAME &&
-            state.selectedTimerMode == TimerMode.BLITZ &&
-            !state.boardState.isGameOver &&
-            !state.boardState.isCurrentPlayerAi
-
-        if (!isBlitzActive) {
-            _uiState.update {
-                it.copy(
-                    blitzRemainingSeconds = BLITZ_DURATION_MS / 1000f,
-                    blitzRemainingFraction = 1f
-                )
-            }
-            return
-        }
-
-        blitzTimerJob = viewModelScope.launch {
-            var remainingMs = BLITZ_DURATION_MS
-            _uiState.update {
-                it.copy(
-                    blitzRemainingSeconds = remainingMs / 1000f,
-                    blitzRemainingFraction = 1f
-                )
-            }
-            while (remainingMs > 0L) {
-                delay(BLITZ_TICK_MS)
-                val latest = _uiState.value
-                if (latest.currentScreen != ScreenDestination.GAME ||
-                    latest.selectedTimerMode != TimerMode.BLITZ ||
-                    latest.boardState.isGameOver ||
-                    latest.boardState.isCurrentPlayerAi
-                ) {
-                    return@launch
-                }
-                remainingMs = (remainingMs - BLITZ_TICK_MS).coerceAtLeast(0L)
-                _uiState.update {
-                    it.copy(
-                        blitzRemainingSeconds = remainingMs / 1000f,
-                        blitzRemainingFraction = remainingMs.toFloat() / BLITZ_DURATION_MS.toFloat()
-                    )
-                }
-            }
-
-            // 5 seconds expired! Player forfeits their turn and Computer immediately takes its turn.
-            onBlitzTimeoutForfeitTurn()
+        _uiState.update {
+            it.copy(
+                blitzRemainingSeconds = BLITZ_DURATION_MS / 1000f,
+                blitzRemainingFraction = 1f
+            )
         }
     }
 
