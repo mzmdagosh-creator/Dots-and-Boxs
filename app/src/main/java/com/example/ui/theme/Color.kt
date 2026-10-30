@@ -11,33 +11,37 @@ enum class AppThemeMode {
 }
 
 // Classic Dark Palette Constants
-val ObsidianBackground = Color(0xFF0B1120)
-val SlateSurface = Color(0xFF131C31)
-val SlateSurfaceElevated = Color(0xFF1E293B)
-val SlateBorder = Color(0xFF334155)
-val DotWhite = Color(0xFFF8FAFC)
+val ObsidianBackground = Color(0xFF0A0E17)
+val SlateSurface = Color(0xFF121826)
+val SlateSurfaceElevated = Color(0xFF1C2536)
+val SlateBorder = Color(0xFF2E3A52)
+val DotWhite = Color(0xFFFFFFFF)
 val MutedText = Color(0xFF94A3B8)
 
-// Classic Dark Player Accents
-val Player1Cyan = Color(0xFF22D3EE)
-val Player1CyanDim = Color(0xFF0891B2)
-val Player1CyanFill = Color(0x3822D3EE)
+// Player 1: Bright Cyan (#00E5FF) & 40% Opacity Box Fill
+val Player1Cyan = Color(0xFF00E5FF)
+val Player1CyanDim = Color(0xFF00B8D4)
+val Player1CyanFill = Color(0x6600E5FF) // 40% opacity (0x66 = 102/255 = 0.40)
 
-val Player2Coral = Color(0xFFFB7185)
-val Player2CoralDim = Color(0xFFE11D48)
-val Player2CoralFill = Color(0x38FB7185)
+// Player 2 / Computer: Neon Magenta (#FF007F) & 40% Opacity Box Fill
+val Player2Coral = Color(0xFFFF007F)
+val Player2CoralDim = Color(0xFFD5006D)
+val Player2CoralFill = Color(0x66FF007F) // 40% opacity (0x66 = 102/255 = 0.40)
 
-val Player3Emerald = Color(0xFF34D399)
+// Player 3: Neon Emerald & 40% Opacity Box Fill
+val Player3Emerald = Color(0xFF10B981)
 val Player3EmeraldDim = Color(0xFF059669)
-val Player3EmeraldFill = Color(0x3834D399)
+val Player3EmeraldFill = Color(0x6610B981)
 
-val Player4Violet = Color(0xFFC084FC)
+// Player 4: Electric Violet & 40% Opacity Box Fill
+val Player4Violet = Color(0xFFA855F7)
 val Player4VioletDim = Color(0xFF9333EA)
-val Player4VioletFill = Color(0x38C084FC)
+val Player4VioletFill = Color(0x66A855F7)
 
 val StreakAmber = Color(0xFFFACC15)
-val UnclaimedEdgeIdle = Color(0xFF1E293B)
-val UnclaimedEdgeHover = Color(0xFF475569)
+// Unselected lines: faint grey at 20% opacity
+val UnclaimedEdgeIdle = Color(0x33FFFFFF) // 20% opacity white/grey (0x33 = 51/255 = 0.20)
+val UnclaimedEdgeHover = Color(0x66FFFFFF)
 
 // High Contrast Light Palette Constants
 val HighContrastBackground = Color(0xFFF8FAFC)
@@ -47,23 +51,23 @@ val HighContrastSurfaceElevated = Color(0xFFF1F5F9)
 val HighContrastBorder = Color(0xFF0F172A)
 val HighContrastText = Color(0xFF090D16)
 val HighContrastMutedText = Color(0xFF334155)
-val HighContrastIdleEdge = Color(0xFFCBD5E1)
+val HighContrastIdleEdge = Color(0x330F172A) // 20% opacity dark grey
 
-val HighContrastP1 = Color(0xFF0044CC)
-val HighContrastP1Fill = Color(0x330044CC)
-val HighContrastP2 = Color(0xFFC81E1E)
-val HighContrastP2Fill = Color(0x33C81E1E)
+val HighContrastP1 = Color(0xFF0077B6)
+val HighContrastP1Fill = Color(0x660077B6) // 40% opacity
+val HighContrastP2 = Color(0xFFC9184A)
+val HighContrastP2Fill = Color(0x66C9184A) // 40% opacity
 val HighContrastP3 = Color(0xFF046C4E)
-val HighContrastP3Fill = Color(0x33046C4E)
+val HighContrastP3Fill = Color(0x66046C4E)
 val HighContrastP4 = Color(0xFF6B21A8)
-val HighContrastP4Fill = Color(0x336B21A8)
+val HighContrastP4Fill = Color(0x666B21A8)
 val HighContrastAmber = Color(0xFFB45309)
 
 @Immutable
 data class GamePalette(
     val themeMode: AppThemeMode = AppThemeMode.CLASSIC_DARK,
     val backgroundDeep: Color = ObsidianBackground,
-    val backgroundRadialTop: Color = Color(0xFF172554),
+    val backgroundRadialTop: Color = Color(0xFF141E33),
     val surface: Color = SlateSurface,
     val surfaceElevated: Color = SlateSurfaceElevated,
     val border: Color = SlateBorder,

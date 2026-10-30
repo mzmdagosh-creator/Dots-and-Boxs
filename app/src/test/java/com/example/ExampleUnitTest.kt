@@ -5,6 +5,7 @@ import com.example.model.CpuDifficulty
 import com.example.model.DotsAndBoxesEngine
 import com.example.model.EdgeCoordinate
 import com.example.model.EdgeOrientation
+import com.example.model.GridSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -16,19 +17,28 @@ import org.junit.Test
 class ExampleUnitTest {
 
     @Test
-    fun boardDimensions_are5x9DotsAnd4x8Boxes() {
-        val state = BoardState()
-        assertEquals(5, state.horizontalEdges.size)
-        assertEquals(8, state.horizontalEdges[0].size)
-        assertEquals(4, state.verticalEdges.size)
-        assertEquals(9, state.verticalEdges[0].size)
-        assertEquals(4, state.boxes.size)
-        assertEquals(8, state.boxes[0].size)
+    fun dynamicGridSizes_scaleMatricesCorrectlyFrom3x3To6x6() {
+        for (grid in GridSize.entries) {
+            val state = BoardState.create(
+                humanPlayerCount = 1,
+                letters = listOf("A", "C"),
+                cpuDifficulty = CpuDifficulty.MEDIUM,
+                boxRows = grid.boxRows,
+                boxCols = grid.boxCols
+            )
+            assertEquals(grid.boxRows + 1, state.horizontalEdges.size)
+            assertEquals(grid.boxCols, state.horizontalEdges[0].size)
+            assertEquals(grid.boxRows, state.verticalEdges.size)
+            assertEquals(grid.boxCols + 1, state.verticalEdges[0].size)
+            assertEquals(grid.boxRows, state.boxes.size)
+            assertEquals(grid.boxCols, state.boxes[0].size)
+            assertEquals(grid.boxRows * grid.boxCols, state.totalBoxes)
+        }
     }
 
     @Test
     fun completingSingleBox_capturesBoxAndGrantsExtraTurn() {
-        var state = BoardState.create(2, listOf("X", "O"))
+        var state = BoardState.create(2, listOf("X", "O"), boxRows = 4, boxCols = 4)
 
         state = DotsAndBoxesEngine.makeMove(
             state,
@@ -71,7 +81,7 @@ class ExampleUnitTest {
 
     @Test
     fun completingTwoBoxesSimultaneously_triggersMultiSquareComboAndOneExtraTurn() {
-        var state = BoardState.create(2, listOf("A", "B"))
+        var state = BoardState.create(2, listOf("A", "B"), boxRows = 4, boxCols = 4)
         val moves = listOf(
             EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0),
             EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0),
@@ -100,8 +110,14 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun cpuDifficulties_easyMediumHardPrioritizeScoringAndAvoidOrMinimizeThirdSides() {
-        var state = BoardState.create(1, listOf("A", "C"), CpuDifficulty.HARD)
+    fun cpuDifficulties_easyRandom_mediumGreedySafe_hardMinimaxAlphaBeta() {
+        var state = BoardState.create(
+            humanPlayerCount = 1,
+            letters = listOf("A", "C"),
+            cpuDifficulty = CpuDifficulty.HARD,
+            boxRows = 3,
+            boxCols = 3
+        )
         assertEquals("C", state.player2Letter)
         assertTrue(state.isPlayerAi(2))
 
@@ -109,7 +125,12 @@ class ExampleUnitTest {
         state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0))!!.newState
         state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0))!!.newState
 
-        // Medium and Hard must avoid completing the 3rd side of box (0,0) -> VERTICAL (0,0) and VERTICAL (0,1)
+        // Easy selects any valid un-drawn line
+        val easyMove = DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.EASY)
+        assertNotNull(easyMove)
+        assertNotNull(DotsAndBoxesEngine.makeMove(state, easyMove!!))
+
+        // Medium (Greedy & Safe) and Hard (Minimax Alpha-Beta depth 3 on 3x3) must avoid completing the 3rd side of box (0,0)
         val mediumMove = DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.MEDIUM)!!
         assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0), mediumMove)
         assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1), mediumMove)
@@ -118,12 +139,11 @@ class ExampleUnitTest {
         assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0), hardMove)
         assertNotEquals(EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1), hardMove)
 
-        // Now add the 3rd side of box (0,0): VERTICAL (0,0)
+        // Now add the 3rd side of box (0,0): VERTICAL (0,0), so box (0,0) has 3 walls
         state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0))!!.newState
 
-        // All three difficulties (Easy, Medium, Hard) must take the 4th side VERTICAL (0,1)
+        // Medium and Hard must take the 4th side VERTICAL (0,1)
         val expectedCapture = EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1)
-        assertEquals(expectedCapture, DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.EASY))
         assertEquals(expectedCapture, DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.MEDIUM))
         assertEquals(expectedCapture, DotsAndBoxesEngine.cpuTakeTurn(state, CpuDifficulty.HARD))
     }

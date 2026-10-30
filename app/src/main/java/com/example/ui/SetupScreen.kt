@@ -13,9 +13,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +29,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SmartToy
@@ -62,23 +66,28 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.CpuDifficulty
 import com.example.model.GameMode
+import com.example.model.GridSize
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalGamePalette
+import com.example.viewmodel.MatchHistoryItem
 import com.example.viewmodel.PlayerSessionStats
 
 @Composable
 fun SetupScreen(
     themeMode: AppThemeMode,
     soundEnabled: Boolean,
+    selectedGridSize: GridSize,
     selectedGameMode: GameMode,
     selectedCpuDifficulty: CpuDifficulty,
     selectedPlayerCount: Int,
     playerInputs: List<String>,
     sessionStats: Map<Int, PlayerSessionStats>,
+    matchHistory: List<MatchHistoryItem>,
     errorResId: Int?,
     onSelectThemeMode: (AppThemeMode) -> Unit,
     onSetSoundEnabled: (Boolean) -> Unit,
+    onSelectGridSize: (GridSize) -> Unit,
     onSelectGameMode: (GameMode) -> Unit,
     onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onSelectPlayerCount: (Int) -> Unit,
@@ -127,7 +136,7 @@ fun SetupScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp)
+                            .height(116.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_hero_dots_boxes),
@@ -155,7 +164,7 @@ fun SetupScreen(
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Text(
-                                    text = "5×9 DOTS • PVP & CPU",
+                                    text = "3×3 TO 6×6 • MINIMAX AI",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = palette.primaryText
                                 )
@@ -202,6 +211,50 @@ fun SetupScreen(
                         style = MaterialTheme.typography.titleLarge,
                         color = palette.primaryText
                     )
+
+                    // Grid Size Selector (3x3, 4x4, 5x5, 6x6)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.grid_size_label),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.mutedText
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GridSize.entries.forEach { sizeOption ->
+                                val isSelected = selectedGridSize == sizeOption
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(
+                                            if (isSelected) palette.p1Accent else palette.surfaceElevated
+                                        )
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) palette.p1Accent else palette.border,
+                                            shape = RoundedCornerShape(14.dp)
+                                        )
+                                        .clickable { onSelectGridSize(sizeOption) }
+                                        .testTag("setup_grid_${sizeOption.boxRows}x${sizeOption.boxCols}_button"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = sizeOption.label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (isSelected) Color.Black else palette.primaryText
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     // Theme Picker ('Classic Dark' vs 'High Contrast') & Sound Engine Toggle
                     Column(
@@ -288,22 +341,22 @@ fun SetupScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             ModeTogglePill(
-                                title = stringResource(R.string.mode_pvp_button),
-                                icon = Icons.Filled.Group,
-                                isSelected = !isCpuMode,
-                                accentColor = palette.p1Accent,
-                                testTag = "mode_pvp_button",
-                                onClick = { onSelectGameMode(GameMode.PVP) },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            ModeTogglePill(
                                 title = stringResource(R.string.mode_cpu_button),
                                 icon = Icons.Filled.SmartToy,
                                 isSelected = isCpuMode,
                                 accentColor = palette.p2Accent,
                                 testTag = "mode_cpu_button",
                                 onClick = { onSelectGameMode(GameMode.CPU) },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            ModeTogglePill(
+                                title = stringResource(R.string.mode_pvp_button),
+                                icon = Icons.Filled.Group,
+                                isSelected = !isCpuMode,
+                                accentColor = palette.p1Accent,
+                                testTag = "mode_pvp_button",
+                                onClick = { onSelectGameMode(GameMode.PVP) },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -358,7 +411,7 @@ fun SetupScreen(
                                         Text(
                                             text = diffLabel,
                                             style = MaterialTheme.typography.labelLarge,
-                                            color = if (isSelected) Color.White else palette.primaryText
+                                            color = if (isSelected) Color.Black else palette.primaryText
                                         )
                                     }
                                 }
@@ -422,7 +475,7 @@ fun SetupScreen(
                                         Text(
                                             text = "$count Players",
                                             style = MaterialTheme.typography.labelLarge,
-                                            color = if (isSelected) Color.White else palette.primaryText
+                                            color = if (isSelected) Color.Black else palette.primaryText
                                         )
                                     }
                                 }
@@ -430,7 +483,7 @@ fun SetupScreen(
                         }
                     }
 
-                    // Row 1: Player 1 and Player 2 (or Locked CPU in CPU Mode)
+                    // Row 1: Player 1 (Cyan) and Computer / Player 2 (Magenta)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -523,7 +576,7 @@ fun SetupScreen(
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = palette.p1Accent,
-                            contentColor = Color.White
+                            contentColor = Color.Black
                         )
                     ) {
                         Icon(
@@ -542,7 +595,7 @@ fun SetupScreen(
                 }
             }
 
-            // Persistent Session Stats & Standalone Web HTML Card
+            // Persistent Session Stats, Match History (Last 5), & Web HTML Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -580,6 +633,73 @@ fun SetupScreen(
                                     ),
                                     color = palette.primaryText
                                 )
+                            }
+                        }
+                    }
+
+                    // Match History Section (Last 5 Completed Games)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.History,
+                                contentDescription = null,
+                                tint = palette.p2Accent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.match_history_title).uppercase(),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = palette.mutedText
+                            )
+                        }
+
+                        if (matchHistory.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.match_history_empty),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = palette.mutedText
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 110.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(
+                                    items = matchHistory,
+                                    key = { it.matchNumber }
+                                ) { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(palette.surfaceElevated)
+                                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "#${item.matchNumber} (${item.gridSizeLabel}) • ${item.scoreSummary}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = palette.primaryText
+                                        )
+                                        Text(
+                                            text = item.winnerLabel,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = palette.p1Accent
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -660,13 +780,13 @@ private fun ModeTogglePill(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) Color.White else accentColor,
+                tint = if (isSelected) Color.Black else accentColor,
                 modifier = Modifier.size(17.dp)
             )
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (isSelected) Color.White else palette.primaryText
+                color = if (isSelected) Color.Black else palette.primaryText
             )
         }
     }
@@ -768,7 +888,7 @@ private fun PlayerInitialInputCard(
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold
                             ),
-                            color = if (isSelected) Color.White else palette.mutedText
+                            color = if (isSelected) Color.Black else palette.mutedText
                         )
                     }
                 }

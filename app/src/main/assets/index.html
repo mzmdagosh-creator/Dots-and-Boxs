@@ -20,31 +20,31 @@
             --border-subtle: rgba(148, 163, 184, 0.22);
             --text-color: #f8fafc;
             --muted-text: #94a3b8;
-            --dot-color: #e2e8f0;
-            --dot-glow: rgba(248, 250, 252, 0.65);
-            --line-idle: #26354d;
-            --line-hover: #64748b;
+            --dot-color: #ffffff;
+            --dot-glow: rgba(255, 255, 255, 0.65);
+            --line-idle: rgba(255, 255, 255, 0.20);
+            --line-hover: rgba(255, 255, 255, 0.45);
 
-            /* Vibrant Neon Player Colors (Classic Dark) */
-            --p1-color: #3b82f6;
-            --p1-neon: #60a5fa;
-            --p1-glow: rgba(59, 130, 246, 0.75);
-            --p1-fill: rgba(59, 130, 246, 0.28);
+            /* Vibrant Neon Player Colors (Classic Dark: Cyan & Neon Magenta) */
+            --p1-color: #00e5ff;
+            --p1-neon: #00e5ff;
+            --p1-glow: rgba(0, 229, 255, 0.75);
+            --p1-fill: rgba(0, 229, 255, 0.40);
 
-            --p2-color: #ef4444;
-            --p2-neon: #f87171;
-            --p2-glow: rgba(239, 68, 68, 0.75);
-            --p2-fill: rgba(239, 68, 68, 0.28);
+            --p2-color: #ff007f;
+            --p2-neon: #ff007f;
+            --p2-glow: rgba(255, 0, 127, 0.75);
+            --p2-fill: rgba(255, 0, 127, 0.40);
 
             --p3-color: #10b981;
             --p3-neon: #34d399;
             --p3-glow: rgba(16, 185, 129, 0.75);
-            --p3-fill: rgba(16, 185, 129, 0.28);
+            --p3-fill: rgba(16, 185, 129, 0.40);
 
             --p4-color: #a855f7;
             --p4-neon: #c084fc;
             --p4-glow: rgba(168, 85, 247, 0.75);
-            --p4-fill: rgba(168, 85, 247, 0.28);
+            --p4-fill: rgba(168, 85, 247, 0.40);
 
             /* Dynamic Auto-Scale Factor computed by JS for 100% zero-scroll visibility */
             --board-auto-scale: 1;
@@ -718,6 +718,100 @@
             filter: brightness(1.06);
         }
 
+        .match-history-panel {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 0.38rem 0.65rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .match-history-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.71rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted-text);
+        }
+
+        .match-history-list {
+            max-height: 62px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding-right: 4px;
+        }
+
+        .match-history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            border-radius: 0.45rem;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+
+        .match-history-empty {
+            font-size: 0.73rem;
+            color: var(--muted-text);
+            font-style: italic;
+            padding: 0.12rem 0;
+        }
+
+        .inline-controls-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            width: 100%;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .inline-control-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
+            border-radius: 0.6rem;
+            padding: 0.2rem 0.4rem;
+        }
+
+        .inline-control-label {
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--muted-text);
+            margin-right: 2px;
+        }
+
+        .mini-seg-btn {
+            padding: 0.22rem 0.45rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            border: none;
+            border-radius: 0.38rem;
+            background: transparent;
+            color: var(--muted-text);
+            cursor: pointer;
+        }
+
+        .mini-seg-btn.active {
+            background: var(--p1-color);
+            color: #060b16;
+        }
+
         .hidden { display: none !important; }
     </style>
 </head>
@@ -765,8 +859,18 @@
                 </div>
             </div>
 
+            <div>
+                <div class="section-label">Grid Size (3×3 to 6×6 Boxes)</div>
+                <div class="segmented-control">
+                    <button type="button" class="seg-btn grid-size-btn" data-size="3" onclick="setGridSize(3, 3)">3×3</button>
+                    <button type="button" class="seg-btn grid-size-btn active" data-size="4" onclick="setGridSize(4, 4)">4×4</button>
+                    <button type="button" class="seg-btn grid-size-btn" data-size="5" onclick="setGridSize(5, 5)">5×5</button>
+                    <button type="button" class="seg-btn grid-size-btn" data-size="6" onclick="setGridSize(6, 6)">6×6</button>
+                </div>
+            </div>
+
             <div id="cpu-difficulty-section" class="hidden">
-                <div class="section-label">CPU Difficulty</div>
+                <div class="section-label">CPU Difficulty (Hard = Minimax α-β)</div>
                 <div class="segmented-control">
                     <button type="button" id="diff-easy-btn" class="seg-btn diff-easy" onclick="setCpuDifficulty('EASY')">Easy</button>
                     <button type="button" id="diff-medium-btn" class="seg-btn diff-medium active" onclick="setCpuDifficulty('MEDIUM')">Medium</button>
@@ -822,8 +926,24 @@
                 <div id="board"></div>
             </div>
 
-            <!-- Persistent Footer with Session Win/Loss Stats & Quick Controls -->
+            <!-- Persistent Footer with Grid Size, Difficulty, Session Win/Loss Stats & Scrollable Match History -->
             <footer class="game-footer">
+                <div class="inline-controls-row">
+                    <div class="inline-control-group">
+                        <span class="inline-control-label">Grid:</span>
+                        <button type="button" class="mini-seg-btn grid-size-btn" data-size="3" onclick="setGridSize(3, 3)">3×3</button>
+                        <button type="button" class="mini-seg-btn grid-size-btn active" data-size="4" onclick="setGridSize(4, 4)">4×4</button>
+                        <button type="button" class="mini-seg-btn grid-size-btn" data-size="5" onclick="setGridSize(5, 5)">5×5</button>
+                        <button type="button" class="mini-seg-btn grid-size-btn" data-size="6" onclick="setGridSize(6, 6)">6×6</button>
+                    </div>
+                    <div class="inline-control-group">
+                        <span class="inline-control-label">AI:</span>
+                        <button type="button" class="mini-seg-btn inline-diff-btn" data-diff="EASY" onclick="setCpuDifficulty('EASY')">Easy</button>
+                        <button type="button" class="mini-seg-btn inline-diff-btn active" data-diff="MEDIUM" onclick="setCpuDifficulty('MEDIUM')">Medium</button>
+                        <button type="button" class="mini-seg-btn inline-diff-btn" data-diff="HARD" onclick="setCpuDifficulty('HARD')">Hard</button>
+                    </div>
+                </div>
+
                 <div id="session-stats-footer" class="stats-footer-panel">
                     <div class="stats-title">
                         <span>📊 Session Stats</span>
@@ -831,8 +951,18 @@
                     <div id="stats-tallies-container" class="stats-tallies-list"></div>
                 </div>
 
+                <div id="match-history-panel" class="match-history-panel">
+                    <div class="match-history-header">
+                        <span>🏆 Match History (Last 5 Games)</span>
+                        <span id="match-history-count">0 / 5</span>
+                    </div>
+                    <div id="match-history-list" class="match-history-list">
+                        <div class="match-history-empty">No completed games in this session yet.</div>
+                    </div>
+                </div>
+
                 <div class="footer-actions">
-                    <button type="button" class="secondary-btn" onclick="restartCurrentMatch()">Restart Match</button>
+                    <button type="button" class="secondary-btn" onclick="restartCurrentMatch()">Restart Game</button>
                     <button type="button" class="secondary-btn" onclick="toggleThemeQuick()">Theme: <span id="quick-theme-label">Classic Dark</span></button>
                     <button type="button" class="secondary-btn" onclick="toggleSoundQuick()">SFX: <span id="quick-sound-label">On</span></button>
                     <button type="button" class="secondary-btn" onclick="returnToSetup()">Settings / Setup</button>
@@ -842,15 +972,15 @@
     </div>
 
     <script>
-        const DOT_ROWS = 5;
-        const DOT_COLS = 9;
-        const BOX_ROWS = 4;
-        const BOX_COLS = 8;
-        const TOTAL_BOXES = 32;
+        let BOX_ROWS = 4;
+        let BOX_COLS = 4;
+        let DOT_ROWS = BOX_ROWS + 1;
+        let DOT_COLS = BOX_COLS + 1;
+        let TOTAL_BOXES = BOX_ROWS * BOX_COLS;
 
-        // Unscaled intrinsic dimensions of #board (8*50 + 9*12 = 508px, 4*50 + 5*12 = 260px)
-        const BOARD_BASE_WIDTH = 508;
-        const BOARD_BASE_HEIGHT = 260;
+        // Dynamic intrinsic dimensions of #board
+        let BOARD_BASE_WIDTH = BOX_COLS * 50 + DOT_COLS * 16;
+        let BOARD_BASE_HEIGHT = BOX_ROWS * 50 + DOT_ROWS * 16;
 
         const appWrapper = document.getElementById('app-wrapper');
         const setupScreen = document.getElementById('setup-screen');
@@ -889,6 +1019,10 @@
             2: { wins: 0, losses: 0, ties: 0 },
             3: { wins: 0, losses: 0, ties: 0 }
         };
+
+        // Match History of the last 5 completed games in the current session
+        let matchHistory = [];
+        let totalCompletedMatches = 0;
 
         let hLines = [];
         let vLines = [];
@@ -1158,11 +1292,40 @@
             setupError.textContent = '';
         }
 
+        function setGridSize(rows, cols) {
+            BOX_ROWS = rows;
+            BOX_COLS = cols;
+            DOT_ROWS = rows + 1;
+            DOT_COLS = cols + 1;
+            TOTAL_BOXES = rows * cols;
+            BOARD_BASE_WIDTH = BOX_COLS * 50 + DOT_COLS * 16;
+            BOARD_BASE_HEIGHT = BOX_ROWS * 50 + DOT_ROWS * 16;
+
+            document.querySelectorAll('.grid-size-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.size, 10) === rows);
+            });
+
+            // Changing grid size mid-game automatically resets the board, clears all lines, and resets the score to 0-0
+            if (players.length > 0 && !gameScreen.classList.contains('hidden')) {
+                SoundEngine.playLineClick();
+                initMatchState();
+            }
+        }
+
         function setCpuDifficulty(diff) {
             cpuDifficulty = diff;
             document.getElementById('diff-easy-btn').classList.toggle('active', diff === 'EASY');
             document.getElementById('diff-medium-btn').classList.toggle('active', diff === 'MEDIUM');
             document.getElementById('diff-hard-btn').classList.toggle('active', diff === 'HARD');
+            document.querySelectorAll('.inline-diff-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.diff === diff);
+            });
+            if (players.length > 1 && players[1].isCpu) {
+                players[1].name = `CPU (${cpuDifficulty})`;
+                renderScoreboard();
+                renderSessionStats();
+                updateUI();
+            }
         }
 
         function setPvpCount(count) {
@@ -1266,6 +1429,10 @@
         function buildBoard() {
             board.innerHTML = '';
             board.classList.remove('board-locked');
+            board.style.gridTemplateColumns = `repeat(${BOX_COLS}, 16px 50px) 16px`;
+            board.style.gridTemplateRows = `repeat(${BOX_ROWS}, 16px 50px) 16px`;
+            board.style.width = `${BOARD_BASE_WIDTH}px`;
+            board.style.height = `${BOARD_BASE_HEIGHT}px`;
 
             hLines = Array.from({ length: DOT_ROWS }, () => Array(BOX_COLS).fill(false));
             vLines = Array.from({ length: BOX_ROWS }, () => Array(DOT_COLS).fill(false));
@@ -1274,8 +1441,11 @@
             boxesState = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(0));
             boxOwners = Array.from({ length: BOX_ROWS }, () => Array(BOX_COLS).fill(-1));
 
-            for (let r = 0; r < 9; r++) {
-                for (let c = 0; c < 17; c++) {
+            const gridRows = BOX_ROWS * 2 + 1;
+            const gridCols = BOX_COLS * 2 + 1;
+
+            for (let r = 0; r < gridRows; r++) {
+                for (let c = 0; c < gridCols; c++) {
                     const el = document.createElement('div');
 
                     if (r % 2 === 0 && c % 2 === 0) {
@@ -1325,8 +1495,8 @@
 
         /**
          * =========================================================================
-         * 4. PERSISTENT SESSION STATS FOOTER RENDERING
-         * Displays Wins and Losses across matches within the current session for each player.
+         * 4. PERSISTENT SESSION STATS & MATCH HISTORY FOOTER RENDERING
+         * Displays Wins/Losses and a scrollable list of the last 5 completed games.
          * =========================================================================
          */
         function renderSessionStats() {
@@ -1342,6 +1512,26 @@
                 `;
                 statsTalliesContainer.appendChild(pill);
             });
+            renderMatchHistory();
+        }
+
+        function renderMatchHistory() {
+            const listEl = document.getElementById('match-history-list');
+            const countEl = document.getElementById('match-history-count');
+            if (!listEl || !countEl) return;
+
+            countEl.textContent = `${matchHistory.length} / 5`;
+            if (matchHistory.length === 0) {
+                listEl.innerHTML = `<div class="match-history-empty">No completed games in this session yet.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = matchHistory.map(item => `
+                <div class="match-history-item">
+                    <span>#${item.matchNumber} (${item.gridLabel}) — <strong>${item.scoreSummary}</strong></span>
+                    <span style="color: ${item.winnerColor};">${item.winnerLabel}</span>
+                </div>
+            `).join('');
         }
 
         function handleHumanLineClick(e) {
@@ -1571,40 +1761,10 @@
         }
 
         function chooseEasyMove(availableMoves) {
-            const scoringMoves = availableMoves.filter(m =>
-                getAdjacentBoxCoords(m).some(b => boxesState[b.r][b.c] === 3)
-            );
-            if (scoringMoves.length > 0) return randomChoice(scoringMoves);
             return randomChoice(availableMoves);
         }
 
         function chooseMediumMove(availableMoves) {
-            const doubleCaptures = [];
-            const singleCaptures = [];
-            const safeMoves = [];
-            const riskySingleBoxMoves = [];
-            const riskyDoubleBoxMoves = [];
-
-            for (const move of availableMoves) {
-                const adj = getAdjacentBoxCoords(move);
-                const completable = adj.filter(b => boxesState[b.r][b.c] === 3).length;
-                const thirdSidesCreated = adj.filter(b => boxesState[b.r][b.c] === 2).length;
-
-                if (completable === 2) doubleCaptures.push(move);
-                else if (completable === 1) singleCaptures.push(move);
-                else if (thirdSidesCreated === 0) safeMoves.push(move);
-                else if (thirdSidesCreated === 1) riskySingleBoxMoves.push(move);
-                else riskyDoubleBoxMoves.push(move);
-            }
-
-            if (doubleCaptures.length > 0) return randomChoice(doubleCaptures);
-            if (singleCaptures.length > 0) return randomChoice(singleCaptures);
-            if (safeMoves.length > 0) return randomChoice(safeMoves);
-            if (riskySingleBoxMoves.length > 0) return randomChoice(riskySingleBoxMoves);
-            return randomChoice(riskyDoubleBoxMoves);
-        }
-
-        function chooseHardMove(availableMoves) {
             const scoringMoves = [];
             const safeMoves = [];
             const riskyMoves = [];
@@ -1612,89 +1772,157 @@
             for (const move of availableMoves) {
                 const adj = getAdjacentBoxCoords(move);
                 const completable = adj.filter(b => boxesState[b.r][b.c] === 3).length;
-                const createsThird = adj.filter(b => boxesState[b.r][b.c] === 2).length;
+                const thirdSidesCreated = adj.filter(b => boxesState[b.r][b.c] === 2).length;
 
-                if (completable > 0) {
-                    const unlocksCascade = adj.some(b => boxesState[b.r][b.c] === 2) ? 5 : 0;
-                    scoringMoves.push({ move, priority: completable * 10 + unlocksCascade });
-                } else if (createsThird === 0) {
-                    const totalExistingSides = adj.reduce((acc, b) => acc + boxesState[b.r][b.c], 0);
-                    safeMoves.push({ move, score: -totalExistingSides });
-                } else {
-                    riskyMoves.push(move);
-                }
+                if (completable > 0) scoringMoves.push(move);
+                else if (thirdSidesCreated === 0) safeMoves.push(move);
+                else riskyMoves.push(move);
             }
 
-            if (scoringMoves.length > 0) {
-                scoringMoves.sort((a, b) => b.priority - a.priority);
-                const bestPriority = scoringMoves[0].priority;
-                return randomChoice(scoringMoves.filter(m => m.priority === bestPriority).map(m => m.move));
-            }
-
-            if (safeMoves.length > 0) {
-                safeMoves.sort((a, b) => b.score - a.score);
-                const bestSafeScore = safeMoves[0].score;
-                return randomChoice(safeMoves.filter(m => m.score === bestSafeScore).map(m => m.move));
-            }
-
-            let minChainSacrifice = Infinity;
-            let bestSacrificeMoves = [];
-
-            for (const move of riskyMoves) {
-                const sacrificedBoxes = simulateOpponentChainLength(move);
-                if (sacrificedBoxes < minChainSacrifice) {
-                    minChainSacrifice = sacrificedBoxes;
-                    bestSacrificeMoves = [move];
-                } else if (sacrificedBoxes === minChainSacrifice) {
-                    bestSacrificeMoves.push(move);
-                }
-            }
-
-            return randomChoice(bestSacrificeMoves);
+            if (scoringMoves.length > 0) return randomChoice(scoringMoves);
+            if (safeMoves.length > 0) return randomChoice(safeMoves);
+            return randomChoice(riskyMoves);
         }
 
-        function simulateOpponentChainLength(candidateMove) {
-            const simH = hLines.map(row => [...row]);
-            const simV = vLines.map(row => [...row]);
-            const simBoxes = boxesState.map(row => [...row]);
+        /**
+         * Hard: Minimax algorithm with Alpha-Beta Pruning.
+         * Uses depth 3 on 3x3 grids and depth 2 on larger grids (4x4, 5x5, 6x6).
+         */
+        function chooseHardMove(availableMoves) {
+            const maxDepth = (BOX_ROWS * BOX_COLS <= 9) ? 3 : 2;
+            const ordered = orderMovesForPruning(availableMoves, boxesState);
 
-            function applySimMove(m) {
-                if (m.type === 'h') simH[m.r][m.c] = true;
-                else simV[m.r][m.c] = true;
+            let bestScore = -Infinity;
+            let bestMoves = [];
+            let alpha = -Infinity;
+            const beta = Infinity;
 
-                let captured = 0;
-                for (const b of getAdjacentBoxCoords(m)) {
-                    simBoxes[b.r][b.c]++;
-                    if (simBoxes[b.r][b.c] === 4) captured++;
+            for (const move of ordered) {
+                const sim = cloneSimState(hLines, vLines, boxesState, players[1]?.score || 0, players[0]?.score || 0, true);
+                applySimMoveState(sim, move);
+                const nextDepth = sim.extraTurn ? maxDepth : maxDepth - 1;
+                const val = minimaxAlphaBeta(sim, nextDepth, alpha, beta);
+
+                if (val > bestScore) {
+                    bestScore = val;
+                    bestMoves = [move];
+                } else if (val === bestScore) {
+                    bestMoves.push(move);
                 }
-                return captured;
+                if (bestScore > alpha) alpha = bestScore;
             }
 
-            applySimMove(candidateMove);
+            return bestMoves.length > 0 ? randomChoice(bestMoves) : randomChoice(availableMoves);
+        }
 
-            let totalOpponentSweep = 0;
-            let foundCapture = true;
+        function cloneSimState(h, v, b, cpuScore, humanScore, isCpuTurn) {
+            return {
+                h: h.map(row => [...row]),
+                v: v.map(row => [...row]),
+                b: b.map(row => [...row]),
+                cpuScore,
+                humanScore,
+                isCpuTurn,
+                extraTurn: false
+            };
+        }
 
-            while (foundCapture) {
-                foundCapture = false;
-                for (let r = 0; r < BOX_ROWS; r++) {
-                    for (let c = 0; c < BOX_COLS; c++) {
-                        if (simBoxes[r][c] === 3) {
-                            let fourthMove = null;
-                            if (!simH[r][c]) fourthMove = { type: 'h', r, c };
-                            else if (!simH[r + 1][c]) fourthMove = { type: 'h', r: r + 1, c };
-                            else if (!simV[r][c]) fourthMove = { type: 'v', r, c };
-                            else if (!simV[r][c + 1]) fourthMove = { type: 'v', r, c: c + 1 };
+        function applySimMoveState(sim, move) {
+            if (move.type === 'h') sim.h[move.r][move.c] = true;
+            else sim.v[move.r][move.c] = true;
 
-                            if (fourthMove) {
-                                totalOpponentSweep += applySimMove(fourthMove);
-                                foundCapture = true;
-                            }
-                        }
-                    }
+            let captured = 0;
+            for (const box of getAdjacentBoxCoords(move)) {
+                sim.b[box.r][box.c]++;
+                if (sim.b[box.r][box.c] === 4) captured++;
+            }
+
+            if (captured > 0) {
+                if (sim.isCpuTurn) sim.cpuScore += captured;
+                else sim.humanScore += captured;
+                sim.extraTurn = true;
+            } else {
+                sim.isCpuTurn = !sim.isCpuTurn;
+                sim.extraTurn = false;
+            }
+        }
+
+        function getSimAvailableMoves(sim) {
+            const moves = [];
+            for (let r = 0; r < DOT_ROWS; r++) {
+                for (let c = 0; c < BOX_COLS; c++) {
+                    if (!sim.h[r][c]) moves.push({ type: 'h', r, c });
                 }
             }
-            return totalOpponentSweep;
+            for (let r = 0; r < BOX_ROWS; r++) {
+                for (let c = 0; c < DOT_COLS; c++) {
+                    if (!sim.v[r][c]) moves.push({ type: 'v', r, c });
+                }
+            }
+            return moves;
+        }
+
+        function orderMovesForPruning(moves, bState) {
+            return [...moves].sort((a, b) => {
+                const scoreMove = (m) => {
+                    const adj = getAdjacentBoxCoords(m);
+                    const caps = adj.filter(box => bState[box.r][box.c] === 3).length;
+                    const thirds = adj.filter(box => bState[box.r][box.c] === 2).length;
+                    if (caps > 0) return -100 * caps;
+                    if (thirds === 0) return 0;
+                    return 50 * thirds;
+                };
+                return scoreMove(a) - scoreMove(b);
+            });
+        }
+
+        function evaluateSimBoard(sim) {
+            let score = (sim.cpuScore - sim.humanScore) * 100;
+            let threeSided = 0;
+            for (let r = 0; r < BOX_ROWS; r++) {
+                for (let c = 0; c < BOX_COLS; c++) {
+                    if (sim.b[r][c] === 3) threeSided++;
+                }
+            }
+            if (threeSided > 0) {
+                score += sim.isCpuTurn ? (threeSided * 45) : -(threeSided * 45);
+            }
+            return score;
+        }
+
+        function minimaxAlphaBeta(sim, depth, alpha, beta) {
+            const avail = getSimAvailableMoves(sim);
+            if (depth <= 0 || avail.length === 0) {
+                return evaluateSimBoard(sim);
+            }
+
+            const ordered = orderMovesForPruning(avail, sim.b);
+
+            if (sim.isCpuTurn) {
+                let maxEval = -Infinity;
+                for (const move of ordered) {
+                    const child = cloneSimState(sim.h, sim.v, sim.b, sim.cpuScore, sim.humanScore, sim.isCpuTurn);
+                    applySimMoveState(child, move);
+                    const nextDepth = child.extraTurn ? depth : depth - 1;
+                    const evalScore = minimaxAlphaBeta(child, nextDepth, alpha, beta);
+                    if (evalScore > maxEval) maxEval = evalScore;
+                    if (evalScore > alpha) alpha = evalScore;
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of ordered) {
+                    const child = cloneSimState(sim.h, sim.v, sim.b, sim.cpuScore, sim.humanScore, sim.isCpuTurn);
+                    applySimMoveState(child, move);
+                    const nextDepth = child.extraTurn ? depth : depth - 1;
+                    const evalScore = minimaxAlphaBeta(child, nextDepth, alpha, beta);
+                    if (evalScore < minEval) minEval = evalScore;
+                    if (evalScore < beta) beta = evalScore;
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
         }
 
         function randomChoice(arr) {
@@ -1741,20 +1969,40 @@
                 if (p.score === maxScore) winningIndices.push(idx);
             });
 
+            let winnerLabel = '';
+            let winnerColor = 'var(--text-color)';
+
             if (winningIndices.length === 1) {
                 const winIdx = winningIndices[0];
                 players.forEach((_, idx) => {
                     if (idx === winIdx) sessionStats[idx].wins++;
                     else sessionStats[idx].losses++;
                 });
-                winnerDisplay.textContent = `${players[winIdx].name} (${players[winIdx].letter}) Wins!`;
-                winnerDisplay.style.color = players[winIdx].neon;
+                winnerLabel = `${players[winIdx].name} (${players[winIdx].letter}) Wins!`;
+                winnerColor = players[winIdx].neon;
+                winnerDisplay.textContent = winnerLabel;
+                winnerDisplay.style.color = winnerColor;
             } else {
                 players.forEach((_, idx) => {
                     sessionStats[idx].ties++;
                 });
-                winnerDisplay.textContent = `Tie Game (${maxScore} Boxes)!`;
+                winnerLabel = `Tie Game (${maxScore} Boxes)`;
+                winnerDisplay.textContent = `${winnerLabel}!`;
                 winnerDisplay.style.color = 'var(--text-color)';
+            }
+
+            // Record in Match History (keep last 5 completed games in current session)
+            totalCompletedMatches++;
+            const scoreSummary = players.map(p => `${p.letter}: ${p.score}`).join(' - ');
+            matchHistory.unshift({
+                matchNumber: totalCompletedMatches,
+                gridLabel: `${BOX_ROWS}×${BOX_COLS}`,
+                scoreSummary,
+                winnerLabel,
+                winnerColor
+            });
+            if (matchHistory.length > 5) {
+                matchHistory = matchHistory.slice(0, 5);
             }
 
             renderSessionStats();

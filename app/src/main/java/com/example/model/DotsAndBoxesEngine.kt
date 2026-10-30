@@ -1,16 +1,19 @@
 package com.example.model
 
+import kotlin.math.max
+import kotlin.math.min
+
 /**
- * Pure Kotlin 2D-array engine for the 5x9 Dots and Boxes board game supporting:
- * - "Player vs Player" (PvP, 2 to 4 players) and "Player vs Computer (CPU)"
- * - Three CPU Difficulty tiers: `EASY` (Naive), `MEDIUM` (Careful), and `HARD` (Competitive Strategy)
- * - Multi-square round combo tracking (`currentComboCount`, `comboChainBoxes`, `comboTriggerId`)
- *
- * Grid Geometry:
- * - 5 rows by 9 columns of dots (`DOT_ROWS = 5`, `DOT_COLS = 9`)
- * - Creates a playable area of 4 rows by 8 columns of boxes (`BOX_ROWS = 4`, `BOX_COLS = 8`, 32 boxes total)
- * - Horizontal edges: 5 rows x 8 columns (`horizontalEdges[r][c]`, where r in 0..4, c in 0..7)
- * - Vertical edges: 4 rows x 9 columns (`verticalEdges[r][c]`, where r in 0..3, c in 0..8)
+ * Dynamic 2D-matrix engine for the native Android Dots and Boxes game supporting:
+ * - Dynamic Grid Sizes from 3x3 up to 6x6 boxes (`GridSize.SIZE_3X3`, `SIZE_4X4`, `SIZE_5X5`, `SIZE_6X6`)
+ * - Single Player vs Computer (CPU) and Multi-Player PvP
+ * - Three CPU Difficulty tiers:
+ *   - `EASY`: Selects a valid un-drawn line completely at random.
+ *   - `MEDIUM`: Greedy and Safe approach. Completes any 3-sided box if available; otherwise strictly
+ *     avoids drawing the 3rd line of any box; picks randomly if no safe moves exist.
+ *   - `HARD`: Minimax algorithm with Alpha-Beta Pruning looking ahead to maximize the computer's
+ *     score while minimizing the player's score, using dynamic depth (depth 3 for 3x3 grids,
+ *     depth 2 for larger grids 4x4, 5x5, 6x6).
  */
 enum class EdgeOrientation {
     HORIZONTAL,
@@ -26,6 +29,26 @@ enum class CpuDifficulty {
     EASY,
     MEDIUM,
     HARD
+}
+
+enum class GridSize(
+    val boxRows: Int,
+    val boxCols: Int,
+    val label: String
+) {
+    SIZE_3X3(3, 3, "3×3"),
+    SIZE_4X4(4, 4, "4×4"),
+    SIZE_5X5(5, 5, "5×5"),
+    SIZE_6X6(6, 6, "6×6");
+
+    val dotRows: Int get() = boxRows + 1
+    val dotCols: Int get() = boxCols + 1
+    val totalBoxes: Int get() = boxRows * boxCols
+
+    companion object {
+        fun fromDimensions(rows: Int, cols: Int): GridSize =
+            entries.firstOrNull { it.boxRows == rows && it.boxCols == cols } ?: SIZE_4X4
+    }
 }
 
 data class EdgeCoordinate(
@@ -52,21 +75,23 @@ data class MoveOutcome(
 )
 
 data class BoardState(
-    val gameMode: GameMode = GameMode.PVP,
+    val boxRows: Int = DEFAULT_BOX_ROWS,
+    val boxCols: Int = DEFAULT_BOX_COLS,
+    val gameMode: GameMode = GameMode.CPU,
     val cpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
-    val humanPlayerCount: Int = 2, // 1..4 configured by user
+    val humanPlayerCount: Int = 1, // 1 = vs CPU, 2..4 = PvP
     val players: List<PlayerConfig> = listOf(
-        PlayerConfig(1, "A", isAi = false),
-        PlayerConfig(2, "B", isAi = false)
+        PlayerConfig(1, "P1", isAi = false),
+        PlayerConfig(2, "CPU", isAi = true)
     ),
     val currentPlayer: Int = 1, // 1..players.size
     val scores: Map<Int, Int> = mapOf(1 to 0, 2 to 0),
-    // 5 rows x 8 cols: 0 = unclaimed, 1..4 = claimed by Player N
-    val horizontalEdges: List<List<Int>> = List(DOT_ROWS) { List(BOX_COLS) { 0 } },
-    // 4 rows x 9 cols: 0 = unclaimed, 1..4 = claimed by Player N
-    val verticalEdges: List<List<Int>> = List(BOX_ROWS) { List(DOT_COLS) { 0 } },
-    // 4 rows x 8 cols: 0 = unclaimed, 1..4 = captured by Player N
-    val boxes: List<List<Int>> = List(BOX_ROWS) { List(BOX_COLS) { 0 } },
+    // (boxRows + 1) rows x boxCols cols: 0 = unclaimed, 1..4 = claimed by Player N
+    val horizontalEdges: List<List<Int>> = List(boxRows + 1) { List(boxCols) { 0 } },
+    // boxRows rows x (boxCols + 1) cols: 0 = unclaimed, 1..4 = claimed by Player N
+    val verticalEdges: List<List<Int>> = List(boxRows) { List(boxCols + 1) { 0 } },
+    // boxRows rows x boxCols cols: 0 = unclaimed, 1..4 = captured by Player N
+    val boxes: List<List<Int>> = List(boxRows) { List(boxCols) { 0 } },
     val lastClaimedEdge: EdgeCoordinate? = null,
     val lastCapturedBoxes: Set<BoxCoordinate> = emptySet(),
     val comboChainBoxes: Set<BoxCoordinate> = emptySet(),
@@ -75,6 +100,18 @@ data class BoardState(
     val hasExtraTurnStreak: Boolean = false,
     val totalMovesPlayed: Int = 0
 ) {
+    val dotRows: Int
+        get() = boxRows + 1
+
+    val dotCols: Int
+        get() = boxCols + 1
+
+    val totalBoxes: Int
+        get() = boxRows * boxCols
+
+    val gridSize: GridSize
+        get() = GridSize.fromDimensions(boxRows, boxCols)
+
     val activePlayerCount: Int
         get() = players.size
 
@@ -94,7 +131,7 @@ data class BoardState(
         get() = scores.values.sum()
 
     val isGameOver: Boolean
-        get() = totalClaimedBoxes == TOTAL_BOXES
+        get() = totalClaimedBoxes == totalBoxes
 
     val isMultiSquareCombo: Boolean
         get() = currentComboCount >= 2
@@ -125,21 +162,21 @@ data class BoardState(
         players.firstOrNull { it.playerNumber == player }?.isAi == true
 
     companion object {
-        const val DOT_ROWS = 5
-        const val DOT_COLS = 9
-        const val BOX_ROWS = DOT_ROWS - 1 // 4
-        const val BOX_COLS = DOT_COLS - 1 // 8
-        const val TOTAL_BOXES = BOX_ROWS * BOX_COLS // 32
+        const val DEFAULT_BOX_ROWS = 4
+        const val DEFAULT_BOX_COLS = 4
 
         fun create(
-            humanPlayerCount: Int,
-            letters: List<String>,
-            cpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM
+            humanPlayerCount: Int = 1,
+            letters: List<String> = listOf("A", "C"),
+            cpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
+            boxRows: Int = DEFAULT_BOX_ROWS,
+            boxCols: Int = DEFAULT_BOX_COLS
         ): BoardState {
+            val safeRows = boxRows.coerceIn(2, 10)
+            val safeCols = boxCols.coerceIn(2, 10)
             val coercedCount = humanPlayerCount.coerceIn(1, 4)
             val mode = if (coercedCount == 1) GameMode.CPU else GameMode.PVP
             val playerConfigs = if (coercedCount == 1) {
-                // Player vs Computer (CPU) mode: Player 1 (Human) vs Player 2 (Locked CPU 'C' or '🤖')
                 val p1Letter = letters.getOrNull(0)?.ifBlank { "A" } ?: "A"
                 val cpuLetter = if (p1Letter.equals("C", ignoreCase = true)) "🤖" else "C"
                 listOf(
@@ -158,12 +195,17 @@ data class BoardState(
             }
 
             return BoardState(
+                boxRows = safeRows,
+                boxCols = safeCols,
                 gameMode = mode,
                 cpuDifficulty = cpuDifficulty,
                 humanPlayerCount = coercedCount,
                 players = playerConfigs,
                 currentPlayer = 1,
-                scores = playerConfigs.associate { it.playerNumber to 0 }
+                scores = playerConfigs.associate { it.playerNumber to 0 },
+                horizontalEdges = List(safeRows + 1) { List(safeCols) { 0 } },
+                verticalEdges = List(safeRows) { List(safeCols + 1) { 0 } },
+                boxes = List(safeRows) { List(safeCols) { 0 } }
             )
         }
     }
@@ -172,8 +214,18 @@ data class BoardState(
 object DotsAndBoxesEngine {
 
     /**
+     * Dynamic Minimax search depth:
+     * - Depth 3 for 3x3 grids
+     * - Depth 2 for larger grids (4x4, 5x5, 6x6)
+     */
+    fun minimaxSearchDepth(boxRows: Int, boxCols: Int): Int =
+        if (boxRows <= 3 && boxCols <= 3) 3 else 2
+
+    /**
      * Claims an unclaimed horizontal or vertical edge and performs O(1) adjacent-box
-     * edge detection using the 2D arrays rather than scanning the entire board.
+     * edge detection using the dynamically sized 2D matrices.
+     * When a player completes the 4th wall of a box, they score a point (+1 per box)
+     * and MUST take an additional turn (`grantedExtraTurn = true`).
      */
     fun makeMove(state: BoardState, edge: EdgeCoordinate): MoveOutcome? {
         if (state.isGameOver) return null
@@ -186,7 +238,7 @@ object DotsAndBoxesEngine {
 
         when (edge.orientation) {
             EdgeOrientation.HORIZONTAL -> {
-                if (edge.row !in 0 until BoardState.DOT_ROWS || edge.col !in 0 until BoardState.BOX_COLS) {
+                if (edge.row !in 0 until state.dotRows || edge.col !in 0 until state.boxCols) {
                     return null
                 }
                 if (hMutable[edge.row][edge.col] != 0) return null
@@ -196,13 +248,13 @@ object DotsAndBoxesEngine {
                 if (edge.row > 0) {
                     candidateBoxes.add(BoxCoordinate(edge.row - 1, edge.col))
                 }
-                if (edge.row < BoardState.BOX_ROWS) {
+                if (edge.row < state.boxRows) {
                     candidateBoxes.add(BoxCoordinate(edge.row, edge.col))
                 }
             }
 
             EdgeOrientation.VERTICAL -> {
-                if (edge.row !in 0 until BoardState.BOX_ROWS || edge.col !in 0 until BoardState.DOT_COLS) {
+                if (edge.row !in 0 until state.boxRows || edge.col !in 0 until state.dotCols) {
                     return null
                 }
                 if (vMutable[edge.row][edge.col] != 0) return null
@@ -212,7 +264,7 @@ object DotsAndBoxesEngine {
                 if (edge.col > 0) {
                     candidateBoxes.add(BoxCoordinate(edge.row, edge.col - 1))
                 }
-                if (edge.col < BoardState.BOX_COLS) {
+                if (edge.col < state.boxCols) {
                     candidateBoxes.add(BoxCoordinate(edge.row, edge.col))
                 }
             }
@@ -275,7 +327,11 @@ object DotsAndBoxesEngine {
     }
 
     /**
-     * Reusable CPU AI heuristic selector (`cpuTakeTurn`) supporting Easy, Medium, and Hard tiers.
+     * Selects the Computer Opponent's next line move according to `difficulty`:
+     * - `EASY`: Selects a valid un-drawn line completely at random.
+     * - `MEDIUM`: Greedy and Safe approach. Always completes a 3-sided box if available.
+     *   Otherwise, strictly avoids drawing the 3rd line of any box. Picks randomly if no safe moves exist.
+     * - `HARD`: Minimax algorithm with Alpha-Beta Pruning (depth 3 for 3x3 grids, depth 2 for larger grids).
      */
     fun cpuTakeTurn(
         state: BoardState,
@@ -283,44 +339,32 @@ object DotsAndBoxesEngine {
     ): EdgeCoordinate? {
         if (state.isGameOver) return null
 
-        val availableEdges = getAllAvailableEdges(state.horizontalEdges, state.verticalEdges)
+        val availableEdges = getAllAvailableEdges(
+            boxRows = state.boxRows,
+            boxCols = state.boxCols,
+            hEdges = state.horizontalEdges,
+            vEdges = state.verticalEdges
+        )
         if (availableEdges.isEmpty()) return null
 
         return when (difficulty) {
-            CpuDifficulty.EASY -> chooseEasyCpuMove(state, availableEdges)
+            CpuDifficulty.EASY -> chooseEasyCpuMove(availableEdges)
             CpuDifficulty.MEDIUM -> chooseMediumCpuMove(state, availableEdges)
-            CpuDifficulty.HARD -> chooseHardCpuMove(state, availableEdges)
+            CpuDifficulty.HARD -> chooseHardMinimaxMove(state, availableEdges)
         }
     }
 
-    fun chooseSmartAiMove(state: BoardState): EdgeCoordinate? =
-        cpuTakeTurn(state, state.cpuDifficulty)
-
     /**
-     * Easy (Naive):
-     * - Prioritizes completing any 4th side (capturing a box) if a scoring move is immediately available.
-     * - If no scoring move is available, randomly picks any unselected line on the entire board.
+     * Easy: Selects a valid un-drawn line completely at random.
      */
-    private fun chooseEasyCpuMove(
-        state: BoardState,
-        availableEdges: List<EdgeCoordinate>
-    ): EdgeCoordinate {
-        val scoringMoves = availableEdges.filter { edge ->
-            getAdjacentBoxes(edge).any { box ->
-                countClaimedSides(box.row, box.col, state.horizontalEdges, state.verticalEdges) == 3
-            }
-        }
-        if (scoringMoves.isNotEmpty()) return scoringMoves.random()
-        return availableEdges.random()
-    }
+    private fun chooseEasyCpuMove(availableEdges: List<EdgeCoordinate>): EdgeCoordinate =
+        availableEdges.random()
 
     /**
-     * Medium (Careful):
-     * - Prioritizes scoring (completing a 4th side) first (preferring double-box captures).
-     * - If no scoring move is available, scans the board and ACTIVELY AVOIDS making a move
-     *   that would complete the 3rd side of any box.
-     * - If all available lines inevitably complete a 3rd side, picks randomly from the safest
-     *   possible lines (exposing 1 box rather than 2).
+     * Medium (Greedy and Safe):
+     * - Always completes a 3-sided box if available (preferring double-box captures).
+     * - Otherwise, strictly avoids drawing the 3rd line of any box.
+     * - Picks randomly if no safe moves exist.
      */
     private fun chooseMediumCpuMove(
         state: BoardState,
@@ -329,11 +373,10 @@ object DotsAndBoxesEngine {
         val doubleCaptures = mutableListOf<EdgeCoordinate>()
         val singleCaptures = mutableListOf<EdgeCoordinate>()
         val safeMoves = mutableListOf<EdgeCoordinate>()
-        val singleRiskyMoves = mutableListOf<EdgeCoordinate>()
-        val doubleRiskyMoves = mutableListOf<EdgeCoordinate>()
+        val riskyMoves = mutableListOf<EdgeCoordinate>()
 
         for (edge in availableEdges) {
-            val adj = getAdjacentBoxes(edge)
+            val adj = getAdjacentBoxes(edge, state.boxRows, state.boxCols)
             var completable = 0
             var thirdSidesCreated = 0
 
@@ -352,196 +395,236 @@ object DotsAndBoxesEngine {
                 completable >= 2 -> doubleCaptures.add(edge)
                 completable == 1 -> singleCaptures.add(edge)
                 thirdSidesCreated == 0 -> safeMoves.add(edge)
-                thirdSidesCreated == 1 -> singleRiskyMoves.add(edge)
-                else -> doubleRiskyMoves.add(edge)
+                else -> riskyMoves.add(edge)
             }
         }
 
         if (doubleCaptures.isNotEmpty()) return doubleCaptures.random()
         if (singleCaptures.isNotEmpty()) return singleCaptures.random()
         if (safeMoves.isNotEmpty()) return safeMoves.random()
-        if (singleRiskyMoves.isNotEmpty()) return singleRiskyMoves.random()
-        return doubleRiskyMoves.random()
+        return riskyMoves.random()
     }
 
     /**
-     * Hard (Competitive Strategy):
-     * - Prioritizes scoring first, evaluating if a scoring move unlocks consecutive scoring cascades
-     *   (where the other adjacent box has 2 sides, chaining into another capture) or double-captures.
-     * - Actively avoids setting up 3rd sides, preferring safe lines bordering boxes with fewer sides.
-     * - If forced to make a "bad" move (giving the opponent a box), simulates the opponent's
-     *   consecutive chain sweep on a cloned 2D board for every candidate move and picks the move
-     *   that gives away the SHORTEST chain of boxes (minimizing damage).
+     * Hard: Minimax algorithm with Alpha-Beta Pruning.
+     * Uses dynamic search depth:
+     * - Depth 3 for 3x3 grids (`boxRows == 3 && boxCols == 3`)
+     * - Depth 2 for larger grids (`4x4`, `5x5`, `6x6`)
      */
-    private fun chooseHardCpuMove(
+    private fun chooseHardMinimaxMove(
         state: BoardState,
         availableEdges: List<EdgeCoordinate>
     ): EdgeCoordinate {
-        data class ScoredMove(val edge: EdgeCoordinate, val priority: Int)
+        val cpuPlayer = state.currentPlayer
+        val humanPlayer = if (cpuPlayer == 2) 1 else 2
+        val searchDepth = minimaxSearchDepth(state.boxRows, state.boxCols)
 
-        val scoringMoves = mutableListOf<ScoredMove>()
-        val safeMoves = mutableListOf<ScoredMove>()
-        val riskyMoves = mutableListOf<EdgeCoordinate>()
+        // Order candidate moves for optimal alpha-beta pruning (captures first, safe second, risky last)
+        val orderedMoves = orderMovesForPruning(state, availableEdges).shuffled()
+            .sortedByDescending { moveOrderingPriority(state, it) }
 
-        for (edge in availableEdges) {
-            val adj = getAdjacentBoxes(edge)
-            var completable = 0
-            var createsThird = 0
-            var existingSidesSum = 0
+        var bestScore = Int.MIN_VALUE
+        var alpha = Int.MIN_VALUE
+        val beta = Int.MAX_VALUE
+        val bestCandidates = mutableListOf<EdgeCoordinate>()
 
-            for (box in adj) {
-                val sides = countClaimedSides(
-                    box.row,
-                    box.col,
-                    state.horizontalEdges,
-                    state.verticalEdges
-                )
-                existingSidesSum += sides
-                if (sides == 3) completable++
-                else if (sides == 2) createsThird++
-            }
-
-            if (completable > 0) {
-                val cascadeBonus = if (createsThird > 0) 5 else 0
-                scoringMoves.add(ScoredMove(edge, completable * 10 + cascadeBonus))
-            } else if (createsThird == 0) {
-                safeMoves.add(ScoredMove(edge, -existingSidesSum))
-            } else {
-                riskyMoves.add(edge)
-            }
-        }
-
-        if (scoringMoves.isNotEmpty()) {
-            val maxPriority = scoringMoves.maxOf { it.priority }
-            return scoringMoves.filter { it.priority == maxPriority }.random().edge
-        }
-
-        if (safeMoves.isNotEmpty()) {
-            val bestScore = safeMoves.maxOf { it.priority }
-            return safeMoves.filter { it.priority == bestScore }.random().edge
-        }
-
-        // Forced sacrifice: evaluate opponent chain length for each risky move and minimize damage
-        var minChainDamage = Int.MAX_VALUE
-        val bestSacrifices = mutableListOf<EdgeCoordinate>()
-
-        for (edge in riskyMoves) {
-            val chainDamage = simulateOpponentChainDamage(
-                state.horizontalEdges,
-                state.verticalEdges,
-                edge
+        for (edge in orderedMoves) {
+            val outcome = makeMove(state, edge) ?: continue
+            val nextIsMaximizing = outcome.newState.currentPlayer == cpuPlayer
+            val eval = minimaxAlphaBeta(
+                state = outcome.newState,
+                depth = searchDepth - 1,
+                alpha = alpha,
+                beta = beta,
+                isMaximizing = nextIsMaximizing,
+                cpuPlayer = cpuPlayer,
+                humanPlayer = humanPlayer
             )
-            if (chainDamage < minChainDamage) {
-                minChainDamage = chainDamage
-                bestSacrifices.clear()
-                bestSacrifices.add(edge)
-            } else if (chainDamage == minChainDamage) {
-                bestSacrifices.add(edge)
+
+            if (eval > bestScore) {
+                bestScore = eval
+                bestCandidates.clear()
+                bestCandidates.add(edge)
+            } else if (eval == bestScore) {
+                bestCandidates.add(edge)
             }
+            alpha = max(alpha, bestScore)
         }
 
-        return bestSacrifices.random()
+        return if (bestCandidates.isNotEmpty()) bestCandidates.random() else availableEdges.random()
     }
 
     /**
-     * Simulates making `candidateEdge` on a copy of the 2D board and counts how many
-     * consecutive 3-sided boxes the opponent can immediately capture in a chain sweep.
+     * Recursive Minimax with Alpha-Beta Pruning accounting for Dots and Boxes bonus turns.
      */
-    fun simulateOpponentChainDamage(
-        hEdges: List<List<Int>>,
-        vEdges: List<List<Int>>,
-        candidateEdge: EdgeCoordinate
+    private fun minimaxAlphaBeta(
+        state: BoardState,
+        depth: Int,
+        alpha: Int,
+        beta: Int,
+        isMaximizing: Boolean,
+        cpuPlayer: Int,
+        humanPlayer: Int
     ): Int {
-        val simH = hEdges.map { it.toMutableList() }.toMutableList()
-        val simV = vEdges.map { it.toMutableList() }.toMutableList()
-
-        fun markEdge(edge: EdgeCoordinate) {
-            if (edge.orientation == EdgeOrientation.HORIZONTAL) {
-                simH[edge.row][edge.col] = 9
-            } else {
-                simV[edge.row][edge.col] = 9
-            }
+        if (depth <= 0 || state.isGameOver) {
+            return evaluateBoardHeuristic(state, cpuPlayer, humanPlayer)
         }
 
-        markEdge(candidateEdge)
+        val available = getAllAvailableEdges(
+            boxRows = state.boxRows,
+            boxCols = state.boxCols,
+            hEdges = state.horizontalEdges,
+            vEdges = state.verticalEdges
+        )
+        if (available.isEmpty()) {
+            return evaluateBoardHeuristic(state, cpuPlayer, humanPlayer)
+        }
 
-        var totalBoxesGivenAway = 0
-        var foundCompletableBox = true
+        val ordered = orderMovesForPruning(state, available)
+        var currentAlpha = alpha
+        var currentBeta = beta
 
-        while (foundCompletableBox) {
-            foundCompletableBox = false
-            for (r in 0 until BoardState.BOX_ROWS) {
-                for (c in 0 until BoardState.BOX_COLS) {
-                    if (countClaimedSides(r, c, simH, simV) == 3) {
-                        val fourthEdge = findFourthUnclaimedEdge(r, c, simH, simV)
-                        if (fourthEdge != null) {
-                            // Count how many 3-sided boxes this 4th edge completes (1 or 2)
-                            var newlyCompleted = 0
-                            for (adj in getAdjacentBoxes(fourthEdge)) {
-                                if (countClaimedSides(adj.row, adj.col, simH, simV) == 3) {
-                                    newlyCompleted++
-                                }
-                            }
-                            markEdge(fourthEdge)
-                            totalBoxesGivenAway += newlyCompleted
-                            foundCompletableBox = true
-                        }
+        if (isMaximizing) {
+            var maxEval = Int.MIN_VALUE
+            for (edge in ordered) {
+                val outcome = makeMove(state, edge) ?: continue
+                val nextIsMax = outcome.newState.currentPlayer == cpuPlayer
+                val eval = minimaxAlphaBeta(
+                    state = outcome.newState,
+                    depth = depth - 1,
+                    alpha = currentAlpha,
+                    beta = currentBeta,
+                    isMaximizing = nextIsMax,
+                    cpuPlayer = cpuPlayer,
+                    humanPlayer = humanPlayer
+                )
+                maxEval = max(maxEval, eval)
+                currentAlpha = max(currentAlpha, eval)
+                if (currentBeta <= currentAlpha) break // Beta cut-off
+            }
+            return maxEval
+        } else {
+            var minEval = Int.MAX_VALUE
+            for (edge in ordered) {
+                val outcome = makeMove(state, edge) ?: continue
+                val nextIsMax = outcome.newState.currentPlayer == cpuPlayer
+                val eval = minimaxAlphaBeta(
+                    state = outcome.newState,
+                    depth = depth - 1,
+                    alpha = currentAlpha,
+                    beta = currentBeta,
+                    isMaximizing = nextIsMax,
+                    cpuPlayer = cpuPlayer,
+                    humanPlayer = humanPlayer
+                )
+                minEval = min(minEval, eval)
+                currentBeta = min(currentBeta, eval)
+                if (currentBeta <= currentAlpha) break // Alpha cut-off
+            }
+            return minEval
+        }
+    }
+
+    /**
+     * Heuristic board evaluation at leaf nodes:
+     * - Primary weight: `(cpuScore - humanScore) * 100`
+     * - Secondary tactical weight: any unclaimed 3-sided box on the board belongs to whoever
+     *   currently holds the turn (`+35` per 3-sided box if it's CPU's turn, `-35` if it's Human's turn).
+     */
+    private fun evaluateBoardHeuristic(
+        state: BoardState,
+        cpuPlayer: Int,
+        humanPlayer: Int
+    ): Int {
+        val cpuScore = state.scoreForPlayer(cpuPlayer)
+        val humanScore = state.scoreForPlayer(humanPlayer)
+        var scoreDiff = (cpuScore - humanScore) * 100
+
+        if (!state.isGameOver) {
+            var threeSidedCount = 0
+            for (r in 0 until state.boxRows) {
+                for (c in 0 until state.boxCols) {
+                    if (state.boxes[r][c] == 0 &&
+                        countClaimedSides(r, c, state.horizontalEdges, state.verticalEdges) == 3
+                    ) {
+                        threeSidedCount++
                     }
                 }
             }
+            if (threeSidedCount > 0) {
+                if (state.currentPlayer == cpuPlayer) {
+                    scoreDiff += threeSidedCount * 35
+                } else {
+                    scoreDiff -= threeSidedCount * 35
+                }
+            }
         }
-        return totalBoxesGivenAway
+        return scoreDiff
     }
 
-    private fun findFourthUnclaimedEdge(
-        boxRow: Int,
-        boxCol: Int,
-        hEdges: List<List<Int>>,
-        vEdges: List<List<Int>>
-    ): EdgeCoordinate? {
-        if (hEdges[boxRow][boxCol] == 0) {
-            return EdgeCoordinate(EdgeOrientation.HORIZONTAL, boxRow, boxCol)
+    private fun orderMovesForPruning(
+        state: BoardState,
+        moves: List<EdgeCoordinate>
+    ): List<EdgeCoordinate> =
+        moves.sortedByDescending { moveOrderingPriority(state, it) }
+
+    private fun moveOrderingPriority(state: BoardState, edge: EdgeCoordinate): Int {
+        val adj = getAdjacentBoxes(edge, state.boxRows, state.boxCols)
+        var completable = 0
+        var createsThird = 0
+        for (box in adj) {
+            val sides = countClaimedSides(
+                box.row,
+                box.col,
+                state.horizontalEdges,
+                state.verticalEdges
+            )
+            if (sides == 3) completable++
+            else if (sides == 2) createsThird++
         }
-        if (hEdges[boxRow + 1][boxCol] == 0) {
-            return EdgeCoordinate(EdgeOrientation.HORIZONTAL, boxRow + 1, boxCol)
+        return when {
+            completable >= 2 -> 30
+            completable == 1 -> 20
+            createsThird == 0 -> 10
+            createsThird == 1 -> -10
+            else -> -20
         }
-        if (vEdges[boxRow][boxCol] == 0) {
-            return EdgeCoordinate(EdgeOrientation.VERTICAL, boxRow, boxCol)
-        }
-        if (vEdges[boxRow][boxCol + 1] == 0) {
-            return EdgeCoordinate(EdgeOrientation.VERTICAL, boxRow, boxCol + 1)
-        }
-        return null
     }
 
     private fun getAllAvailableEdges(
+        boxRows: Int,
+        boxCols: Int,
         hEdges: List<List<Int>>,
         vEdges: List<List<Int>>
     ): List<EdgeCoordinate> {
         val list = mutableListOf<EdgeCoordinate>()
-        for (r in 0 until BoardState.DOT_ROWS) {
-            for (c in 0 until BoardState.BOX_COLS) {
+        for (r in 0..boxRows) {
+            for (c in 0 until boxCols) {
                 if (hEdges[r][c] == 0) list.add(EdgeCoordinate(EdgeOrientation.HORIZONTAL, r, c))
             }
         }
-        for (r in 0 until BoardState.BOX_ROWS) {
-            for (c in 0 until BoardState.DOT_COLS) {
+        for (r in 0 until boxRows) {
+            for (c in 0..boxCols) {
                 if (vEdges[r][c] == 0) list.add(EdgeCoordinate(EdgeOrientation.VERTICAL, r, c))
             }
         }
         return list
     }
 
-    private fun getAdjacentBoxes(edge: EdgeCoordinate): List<BoxCoordinate> {
+    private fun getAdjacentBoxes(
+        edge: EdgeCoordinate,
+        boxRows: Int,
+        boxCols: Int
+    ): List<BoxCoordinate> {
         val result = mutableListOf<BoxCoordinate>()
         when (edge.orientation) {
             EdgeOrientation.HORIZONTAL -> {
                 if (edge.row > 0) result.add(BoxCoordinate(edge.row - 1, edge.col))
-                if (edge.row < BoardState.BOX_ROWS) result.add(BoxCoordinate(edge.row, edge.col))
+                if (edge.row < boxRows) result.add(BoxCoordinate(edge.row, edge.col))
             }
             EdgeOrientation.VERTICAL -> {
                 if (edge.col > 0) result.add(BoxCoordinate(edge.row, edge.col - 1))
-                if (edge.col < BoardState.BOX_COLS) result.add(BoxCoordinate(edge.row, edge.col))
+                if (edge.col < boxCols) result.add(BoxCoordinate(edge.row, edge.col))
             }
         }
         return result

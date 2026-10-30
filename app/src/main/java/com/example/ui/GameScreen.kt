@@ -38,23 +38,27 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.ZoomIn
@@ -102,18 +106,22 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.BoardState
 import com.example.model.BoxCoordinate
+import com.example.model.CpuDifficulty
 import com.example.model.EdgeCoordinate
 import com.example.model.EdgeOrientation
+import com.example.model.GridSize
 import com.example.model.PlayerConfig
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalGamePalette
 import com.example.ui.theme.playerAccentColor
 import com.example.ui.theme.playerFillColor
+import com.example.viewmodel.MatchHistoryItem
 import com.example.viewmodel.PlayerSessionStats
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -121,10 +129,15 @@ import kotlin.math.sin
 fun GameScreen(
     themeMode: AppThemeMode,
     soundEnabled: Boolean,
+    selectedGridSize: GridSize,
+    selectedCpuDifficulty: CpuDifficulty,
     boardState: BoardState,
     sessionStats: Map<Int, PlayerSessionStats>,
+    matchHistory: List<MatchHistoryItem>,
     hoveredEdge: EdgeCoordinate?,
     boardZoom: Float,
+    onSelectGridSize: (GridSize) -> Unit,
+    onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
     onToggleTheme: () -> Unit,
     onToggleSound: () -> Unit,
     onEdgeHover: (EdgeCoordinate?) -> Unit,
@@ -154,7 +167,7 @@ fun GameScreen(
     )
     val comboHeartbeatScale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
-        targetValue = 1.055f,
+        targetValue = 1.05f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 380, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -172,17 +185,17 @@ fun GameScreen(
         if (boardState.comboTriggerId > 0) {
             val isCombo = boardState.currentComboCount >= 2 || boardState.lastCapturedBoxes.size >= 2
             val targetZoomPunch = if (isCombo) {
-                1.045f + (boardState.currentComboCount.coerceAtMost(6) * 0.008f)
+                1.04f + (boardState.currentComboCount.coerceAtMost(6) * 0.007f)
             } else {
-                1.018f
+                1.015f
             }
 
             launch {
-                val shakeMagnitude = if (isCombo) 10f else 4.5f
+                val shakeMagnitude = if (isCombo) 8f else 3.5f
                 for (step in listOf(1f, -0.85f, 0.7f, -0.5f, 0.3f, 0f)) {
                     cameraShakeAnim.animateTo(
                         targetValue = step * shakeMagnitude,
-                        animationSpec = tween(durationMillis = 42)
+                        animationSpec = tween(durationMillis = 40)
                     )
                 }
             }
@@ -191,7 +204,7 @@ fun GameScreen(
                 boardComboZoomAnim.snapTo(1f)
                 boardComboZoomAnim.animateTo(
                     targetValue = targetZoomPunch,
-                    animationSpec = tween(durationMillis = 130, easing = FastOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing)
                 )
                 boardComboZoomAnim.animateTo(
                     targetValue = 1f,
@@ -206,7 +219,7 @@ fun GameScreen(
                 comboPulseWaveAnim.snapTo(1f)
                 comboPulseWaveAnim.animateTo(
                     targetValue = 0f,
-                    animationSpec = tween(durationMillis = 720, easing = FastOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 680, easing = FastOutSlowInEasing)
                 )
             }
 
@@ -215,7 +228,7 @@ fun GameScreen(
                     overlayBurstScale.snapTo(0.3f)
                     overlayBurstAlpha.snapTo(1f)
                     overlayBurstScale.animateTo(
-                        targetValue = 1.12f,
+                        targetValue = 1.10f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMedium
@@ -223,11 +236,11 @@ fun GameScreen(
                     )
                     overlayBurstScale.animateTo(
                         targetValue = 1.0f,
-                        animationSpec = tween(durationMillis = 220)
+                        animationSpec = tween(durationMillis = 200)
                     )
                     overlayBurstAlpha.animateTo(
                         targetValue = 0f,
-                        animationSpec = tween(durationMillis = 360)
+                        animationSpec = tween(durationMillis = 340)
                     )
                 }
             }
@@ -242,7 +255,6 @@ fun GameScreen(
     val activeComboColor = playerAccentColor(boardState.currentPlayer)
     val pulseGlowAlpha = comboPulseWaveAnim.value
 
-    // Outer Wrapper Container with natural padding boundary and zero-scroll auto-fit layout
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -254,7 +266,7 @@ fun GameScreen(
                     )
                 )
             )
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -268,19 +280,19 @@ fun GameScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Action Bar with Quick Theme & Sound Toggles
+            // Top Utility & Progress Bar
             TopGameToolbar(
                 themeMode = themeMode,
                 soundEnabled = soundEnabled,
                 claimedBoxes = boardState.totalClaimedBoxes,
+                totalBoxes = boardState.totalBoxes,
                 onToggleTheme = onToggleTheme,
                 onToggleSound = onToggleSound,
                 onReturnToSetup = onReturnToSetup,
-                onRestartMatch = onRestartMatch,
                 onOpenHtmlViewer = onOpenHtmlViewer
             )
 
-            // Scoreboard with Pulsing Turn Neon Indicator & Combo Heartbeat
+            // Top Score Trackers (Cyan vs Magenta)
             ScoreboardHeader(
                 boardState = boardState,
                 neonGlowPulse = neonGlowPulse,
@@ -288,7 +300,7 @@ fun GameScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Winner Banner if all 32 boxes are claimed
+            // Winner Banner when all boxes are claimed
             AnimatedVisibility(
                 visible = boardState.isGameOver,
                 enter = fadeIn() + scaleIn(
@@ -302,7 +314,7 @@ fun GameScreen(
                 )
             }
 
-            // Auto-Scaling 5x9 Grid Container (100% visible in remaining viewport height & width, zero scrolling)
+            // Centered Dynamic Game Board Container (3x3, 4x4, 5x5, 6x6)
             val boardBorderColor = if (pulseGlowAlpha > 0.02f) {
                 activeComboColor.copy(alpha = (0.45f + pulseGlowAlpha * 0.55f).coerceIn(0f, 1f))
             } else {
@@ -336,24 +348,25 @@ fun GameScreen(
                             )
                         }
                     }
-                    .border(boardBorderWidth, boardBorderColor, RoundedCornerShape(22.dp)),
-                shape = RoundedCornerShape(22.dp),
+                    .border(boardBorderWidth, boardBorderColor, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = palette.surface)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     BoardZoomToolbar(
+                        gridLabel = "${boardState.boxRows}×${boardState.boxCols}",
                         boardZoom = boardZoom,
                         comboCount = boardState.currentComboCount,
                         comboAccentColor = activeComboColor,
                         comboPulseFraction = pulseGlowAlpha,
                         onAdjustZoom = onAdjustZoom,
-                        onResetZoom = { onSetZoom(0.92f) }
+                        onResetZoom = { onSetZoom(0.95f) }
                     )
 
                     BoxWithConstraints(
@@ -368,19 +381,32 @@ fun GameScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        val safeStageWidth = (maxWidth * 0.94f).coerceAtLeast(200.dp)
-                        val safeStageHeight = (maxHeight * 0.94f).coerceAtLeast(130.dp)
+                        val safeStageWidth = (maxWidth * 0.92f).coerceAtLeast(180.dp)
+                        val safeStageHeight = (maxHeight * 0.92f).coerceAtLeast(140.dp)
 
-                        val dotCandidateW = (safeStageWidth * 0.034f).coerceIn(8.dp, 14.dp)
-                        val dotCandidateH = (safeStageHeight * 0.06f).coerceIn(8.dp, 14.dp)
-                        val baseDotSlotSize = min(dotCandidateW, dotCandidateH)
+                        val dotRows = boardState.dotRows
+                        val dotCols = boardState.dotCols
+                        val boxRows = boardState.boxRows
+                        val boxCols = boardState.boxCols
 
-                        val maxBoxByWidth = (safeStageWidth - (baseDotSlotSize * 9)) / 8f
-                        val maxBoxByHeight = (safeStageHeight - (baseDotSlotSize * 5)) / 4f
-                        val baseBoxSize = min(maxBoxByWidth, maxBoxByHeight).coerceIn(16.dp, 64.dp)
+                        // Dots are 8.dp radius (16.dp diameter) by default, scaled down gracefully only if stage is tiny
+                        val maxGridDim = max(boxRows, boxCols)
+                        val idealDotDiameter = 16.dp
+                        val maxBoxByWidth = (safeStageWidth - (idealDotDiameter * dotCols)) / boxCols.toFloat()
+                        val maxBoxByHeight = (safeStageHeight - (idealDotDiameter * dotRows)) / boxRows.toFloat()
+                        val rawBoxSize = min(maxBoxByWidth, maxBoxByHeight)
 
-                        val scaledDotSlotSize = (baseDotSlotSize * boardZoom).coerceIn(7.dp, 20.dp)
-                        val scaledBoxSize = (baseBoxSize * boardZoom).coerceIn(14.dp, 72.dp)
+                        val baseDotDiameter = if (rawBoxSize < 24.dp && maxGridDim >= 5) {
+                            12.dp
+                        } else {
+                            idealDotDiameter
+                        }
+                        val recomputedBoxW = (safeStageWidth - (baseDotDiameter * dotCols)) / boxCols.toFloat()
+                        val recomputedBoxH = (safeStageHeight - (baseDotDiameter * dotRows)) / boxRows.toFloat()
+                        val baseBoxSize = min(recomputedBoxW, recomputedBoxH).coerceIn(20.dp, 76.dp)
+
+                        val scaledDotSlotSize = (baseDotDiameter * boardZoom).coerceIn(10.dp, 22.dp)
+                        val scaledBoxSize = (baseBoxSize * boardZoom).coerceIn(18.dp, 88.dp)
 
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -401,10 +427,16 @@ fun GameScreen(
                 }
             }
 
-            // Persistent Session Stats Section in the Footer
-            SessionStatsFooter(
+            // Bottom Control Bar & Match History / Session Stats Footer
+            BottomControlsAndFooter(
+                selectedGridSize = selectedGridSize,
+                selectedCpuDifficulty = selectedCpuDifficulty,
                 players = boardState.players,
                 sessionStats = sessionStats,
+                matchHistory = matchHistory,
+                onSelectGridSize = onSelectGridSize,
+                onSelectCpuDifficulty = onSelectCpuDifficulty,
+                onRestartMatch = onRestartMatch,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -445,7 +477,7 @@ fun GameScreen(
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Black,
-                            fontSize = 28.sp,
+                            fontSize = 26.sp,
                             shadow = Shadow(
                                 color = activeComboColor,
                                 offset = Offset.Zero,
@@ -474,74 +506,214 @@ fun GameScreen(
 }
 
 /**
- * Persistent 'Stats' section in the footer tracking wins and losses across matches
- * within the current session for each active player.
+ * Bottom Footer containing:
+ * 1. Grid Size segmented selector (`3×3`, `4×4`, `5×5`, `6×6`) — resets board & score to 0-0 on change.
+ * 2. Difficulty Toggle (`Easy`, `Medium`, `Hard`) + `Restart Game` button.
+ * 3. Persistent Session Stats (`W - L`) & Scrollable `Match History` panel listing the final score
+ *    and winner of the last 5 completed games within the current session.
  */
 @Composable
-private fun SessionStatsFooter(
+private fun BottomControlsAndFooter(
+    selectedGridSize: GridSize,
+    selectedCpuDifficulty: CpuDifficulty,
     players: List<PlayerConfig>,
     sessionStats: Map<Int, PlayerSessionStats>,
+    matchHistory: List<MatchHistoryItem>,
+    onSelectGridSize: (GridSize) -> Unit,
+    onSelectCpuDifficulty: (CpuDifficulty) -> Unit,
+    onRestartMatch: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalGamePalette.current
 
     Card(
         modifier = modifier
-            .border(1.dp, palette.border, RoundedCornerShape(16.dp))
-            .testTag("session_stats_footer"),
-        shape = RoundedCornerShape(16.dp),
+            .border(1.dp, palette.border, RoundedCornerShape(18.dp))
+            .testTag("bottom_footer_card"),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = palette.surface)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            // Row 1: Grid Size Segmented Selector (3x3, 4x4, 5x5, 6x6)
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.EmojiEvents,
-                    contentDescription = null,
-                    tint = palette.streakAccent,
-                    modifier = Modifier.size(16.dp)
-                )
                 Text(
-                    text = stringResource(R.string.session_stats_title).uppercase(),
+                    text = "GRID:",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold
                     ),
                     color = palette.mutedText
                 )
-            }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                players.forEach { player ->
-                    val pNum = player.playerNumber
-                    val stat = sessionStats[pNum] ?: PlayerSessionStats()
-                    val accent = playerAccentColor(pNum)
-                    val nameTag = if (player.isAi) "CPU" else "P$pNum"
+                GridSize.entries.forEach { sizeOption ->
+                    val isSelected = selectedGridSize == sizeOption
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.surfaceElevated)
-                            .border(1.dp, accent.copy(alpha = 0.65f), RoundedCornerShape(50))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                            .testTag("player${pNum}_stats_pill"),
+                            .weight(1f)
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(
+                                if (isSelected) palette.p1Accent else palette.surfaceElevated
+                            )
+                            .border(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) palette.p1Accent else palette.border,
+                                shape = RoundedCornerShape(9.dp)
+                            )
+                            .clickable { onSelectGridSize(sizeOption) }
+                            .testTag("grid_size_${sizeOption.boxRows}x${sizeOption.boxCols}_button"),
                         contentAlignment = Alignment.Center
                     ) {
+                        Text(
+                            text = sizeOption.label,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = if (isSelected) Color.Black else palette.primaryText
+                        )
+                    }
+                }
+            }
+
+            // Row 2: CPU Difficulty Toggle (Easy, Medium, Hard) + Restart Game Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "AI:",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = palette.mutedText
+                )
+
+                CpuDifficulty.entries.forEach { diff ->
+                    val isSelected = selectedCpuDifficulty == diff
+                    val diffColor = when (diff) {
+                        CpuDifficulty.EASY -> palette.p3Accent
+                        CpuDifficulty.MEDIUM -> palette.streakAccent
+                        CpuDifficulty.HARD -> palette.p2Accent
+                    }
+                    val label = when (diff) {
+                        CpuDifficulty.EASY -> stringResource(R.string.diff_easy)
+                        CpuDifficulty.MEDIUM -> stringResource(R.string.diff_medium)
+                        CpuDifficulty.HARD -> stringResource(R.string.diff_hard)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(
+                                if (isSelected) diffColor else palette.surfaceElevated
+                            )
+                            .border(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) diffColor else palette.border,
+                                shape = RoundedCornerShape(9.dp)
+                            )
+                            .clickable { onSelectCpuDifficulty(diff) }
+                            .testTag("game_diff_${diff.name.lowercase()}_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = if (isSelected) Color.Black else palette.primaryText
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onRestartMatch,
+                    shape = RoundedCornerShape(9.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = palette.p2Accent,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp,
+                        vertical = 0.dp
+                    ),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("restart_match_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.restart_game_button),
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = stringResource(R.string.restart_game_button),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+            }
+
+            // Row 3: Persistent Session Stats Bar (Wins & Losses per player)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(palette.surfaceElevated)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .testTag("session_stats_footer"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.EmojiEvents,
+                        contentDescription = null,
+                        tint = palette.streakAccent,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.session_stats_title).uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        ),
+                        color = palette.mutedText
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    players.forEach { player ->
+                        val pNum = player.playerNumber
+                        val stat = sessionStats[pNum] ?: PlayerSessionStats()
+                        val accent = playerAccentColor(pNum)
+                        val nameTag = if (player.isAi) "CPU" else "P$pNum"
                         Row(
+                            modifier = Modifier.testTag("player${pNum}_stats_pill"),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Text(
-                                text = "$nameTag (${player.letter}):",
+                                text = "$nameTag:",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 10.sp
@@ -566,12 +738,114 @@ private fun SessionStatsFooter(
                     }
                 }
             }
+
+            // Row 4: Match History Panel (Scrollable list of the last 5 completed games in current session)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(palette.surfaceElevated)
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                    .testTag("match_history_panel"),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = null,
+                            tint = palette.p1Accent,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.match_history_title).uppercase(),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.5.sp
+                            ),
+                            color = palette.mutedText
+                        )
+                    }
+                    Text(
+                        text = "${matchHistory.size} / 5",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp
+                        ),
+                        color = palette.mutedText
+                    )
+                }
+
+                if (matchHistory.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.match_history_empty),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = palette.mutedText
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 56.dp)
+                            .testTag("match_history_list"),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        items(
+                            items = matchHistory,
+                            key = { it.matchNumber }
+                        ) { item ->
+                            val winnerColor = when (item.winnerPlayerNumber) {
+                                1 -> palette.p1Accent
+                                2 -> palette.p2Accent
+                                3 -> palette.p3Accent
+                                4 -> palette.p4Accent
+                                else -> palette.streakAccent
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(palette.backgroundDeep.copy(alpha = 0.55f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    .testTag("match_history_item_${item.matchNumber}"),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "#${item.matchNumber} [${item.gridSizeLabel}] ${item.scoreSummary}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp
+                                    ),
+                                    color = palette.primaryText
+                                )
+                                Text(
+                                    text = "Winner: ${item.winnerLabel}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp
+                                    ),
+                                    color = winnerColor
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun BoardZoomToolbar(
+    gridLabel: String,
     boardZoom: Float,
     comboCount: Int,
     comboAccentColor: Color,
@@ -593,8 +867,8 @@ private fun BoardZoomToolbar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "5×9 AUTO-FIT GRID",
-                style = MaterialTheme.typography.labelSmall,
+                text = "$gridLabel BOX GRID • 8dp DOTS • 6dp LINES",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = palette.mutedText
             )
 
@@ -621,14 +895,14 @@ private fun BoardZoomToolbar(
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(7.dp))
                     .background(palette.surfaceElevated)
-                    .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
                     .clickable { onAdjustZoom(-0.1f) }
                     .testTag("zoom_out_button"),
                 contentAlignment = Alignment.Center
@@ -637,34 +911,34 @@ private fun BoardZoomToolbar(
                     imageVector = Icons.Filled.ZoomOut,
                     contentDescription = stringResource(R.string.zoom_out_desc),
                     tint = palette.primaryText,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(7.dp))
                     .background(palette.surfaceElevated)
-                    .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
                     .clickable { onResetZoom() }
-                    .padding(horizontal = 8.dp)
+                    .padding(horizontal = 7.dp)
                     .testTag("zoom_reset_button"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "${(boardZoom * 100).roundToInt()}% FIT",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "${(boardZoom * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = palette.p1Accent
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(7.dp))
                     .background(palette.surfaceElevated)
-                    .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
                     .clickable { onAdjustZoom(0.1f) }
                     .testTag("zoom_in_button"),
                 contentAlignment = Alignment.Center
@@ -673,7 +947,7 @@ private fun BoardZoomToolbar(
                     imageVector = Icons.Filled.ZoomIn,
                     contentDescription = stringResource(R.string.zoom_in_desc),
                     tint = palette.primaryText,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }
@@ -685,10 +959,10 @@ private fun TopGameToolbar(
     themeMode: AppThemeMode,
     soundEnabled: Boolean,
     claimedBoxes: Int,
+    totalBoxes: Int,
     onToggleTheme: () -> Unit,
     onToggleSound: () -> Unit,
     onReturnToSetup: () -> Unit,
-    onRestartMatch: () -> Unit,
     onOpenHtmlViewer: () -> Unit
 ) {
     val palette = LocalGamePalette.current
@@ -703,13 +977,13 @@ private fun TopGameToolbar(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primaryText),
             modifier = Modifier
-                .height(48.dp)
+                .height(44.dp)
                 .testTag("back_to_setup_button")
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                imageVector = Icons.Filled.Tune,
                 contentDescription = stringResource(R.string.change_players_button),
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
@@ -722,15 +996,15 @@ private fun TopGameToolbar(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = stringResource(R.string.boxes_remaining_format, claimedBoxes),
+                text = stringResource(R.string.boxes_remaining_format, claimedBoxes, totalBoxes),
                 style = MaterialTheme.typography.labelSmall,
                 color = palette.mutedText
             )
             Spacer(modifier = Modifier.height(3.dp))
             LinearProgressIndicator(
-                progress = { claimedBoxes / 32f },
+                progress = { if (totalBoxes > 0) claimedBoxes.toFloat() / totalBoxes else 0f },
                 modifier = Modifier
-                    .width(80.dp)
+                    .width(84.dp)
                     .height(5.dp)
                     .clip(RoundedCornerShape(50)),
                 color = palette.p1Accent,
@@ -745,7 +1019,7 @@ private fun TopGameToolbar(
             IconButton(
                 onClick = onToggleTheme,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(palette.surfaceElevated)
                     .border(1.dp, palette.border, RoundedCornerShape(12.dp))
@@ -765,7 +1039,7 @@ private fun TopGameToolbar(
             IconButton(
                 onClick = onToggleSound,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(palette.surfaceElevated)
                     .border(1.dp, palette.border, RoundedCornerShape(12.dp))
@@ -781,7 +1055,7 @@ private fun TopGameToolbar(
             IconButton(
                 onClick = onOpenHtmlViewer,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(palette.surfaceElevated)
                     .border(1.dp, palette.border, RoundedCornerShape(12.dp))
@@ -791,22 +1065,6 @@ private fun TopGameToolbar(
                     imageVector = Icons.Filled.Code,
                     contentDescription = stringResource(R.string.view_html_button),
                     tint = palette.p2Accent
-                )
-            }
-
-            IconButton(
-                onClick = onRestartMatch,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(palette.surfaceElevated)
-                    .border(1.dp, palette.border, RoundedCornerShape(12.dp))
-                    .testTag("restart_match_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = stringResource(R.string.reset_board_button),
-                    tint = palette.p1Accent
                 )
             }
         }
@@ -869,9 +1127,9 @@ private fun ScoreboardHeader(
             AnimatedVisibility(visible = boardState.hasExtraTurnStreak && !boardState.isGameOver) {
                 val activeColor = playerAccentColor(boardState.currentPlayer)
                 val activeLabel = if (boardState.isPlayerAi(boardState.currentPlayer)) {
-                    "CPU (${boardState.letterForPlayer(boardState.currentPlayer)})"
+                    "Computer (${boardState.letterForPlayer(boardState.currentPlayer)})"
                 } else {
-                    "P${boardState.currentPlayer} (${boardState.letterForPlayer(boardState.currentPlayer)})"
+                    "Player ${boardState.currentPlayer} (${boardState.letterForPlayer(boardState.currentPlayer)})"
                 }
                 val badgeText = if (boardState.isMultiSquareCombo) {
                     stringResource(R.string.combo_badge_format, boardState.currentComboCount)
@@ -989,9 +1247,9 @@ private fun PlayerScorePill(
 
             Column {
                 Text(
-                    text = if (player.isAi) "CPU" else "PLAYER ${player.playerNumber}",
+                    text = if (player.isAi) "COMPUTER" else "PLAYER ${player.playerNumber}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = palette.mutedText
+                    color = accentColor
                 )
                 Box(
                     modifier = Modifier
@@ -1011,7 +1269,7 @@ private fun PlayerScorePill(
                             fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold
                         ),
-                        color = if (isCurrentTurn) Color.White else palette.mutedText
+                        color = if (isCurrentTurn) Color.Black else palette.mutedText
                     )
                 }
             }
@@ -1030,6 +1288,12 @@ private fun PlayerScorePill(
     }
 }
 
+/**
+ * Dynamic Dots and Boxes Grid supporting 3x3 up to 6x6 boxes:
+ * - Solid white circles for dots (8.dp radius = 16.dp diameter)
+ * - 6.dp line thickness (20% opacity faint grey unselected, Bright Cyan P1, Neon Magenta Computer)
+ * - 40% opacity player color box fills when completed
+ */
 @Composable
 private fun DotsAndBoxesGrid(
     boardState: BoardState,
@@ -1047,14 +1311,14 @@ private fun DotsAndBoxesGrid(
         modifier = Modifier.testTag("dots_and_boxes_grid"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        for (dotRow in 0 until BoardState.DOT_ROWS) {
+        for (dotRow in 0 until boardState.dotRows) {
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                for (dotCol in 0 until BoardState.DOT_COLS) {
+                for (dotCol in 0 until boardState.dotCols) {
                     DotNode(slotSize = dotSlotSize)
 
-                    if (dotCol < BoardState.BOX_COLS) {
+                    if (dotCol < boardState.boxCols) {
                         val edgeCoord = EdgeCoordinate(
                             orientation = EdgeOrientation.HORIZONTAL,
                             row = dotRow,
@@ -1069,7 +1333,7 @@ private fun DotsAndBoxesGrid(
                             neonGlowPulse = neonGlowPulse,
                             activePlayerColor = activePlayerColor,
                             width = boxSize,
-                            slotHeight = (dotSlotSize * 1.5f).coerceAtLeast(16.dp),
+                            slotHeight = (dotSlotSize * 1.4f).coerceAtLeast(18.dp),
                             onHover = onEdgeHover,
                             onClick = { onEdgeClick(edgeCoord) }
                         )
@@ -1077,11 +1341,11 @@ private fun DotsAndBoxesGrid(
                 }
             }
 
-            if (dotRow < BoardState.BOX_ROWS) {
+            if (dotRow < boardState.boxRows) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    for (dotCol in 0 until BoardState.DOT_COLS) {
+                    for (dotCol in 0 until boardState.dotCols) {
                         val vEdgeCoord = EdgeCoordinate(
                             orientation = EdgeOrientation.VERTICAL,
                             row = dotRow,
@@ -1101,7 +1365,7 @@ private fun DotsAndBoxesGrid(
                             onClick = { onEdgeClick(vEdgeCoord) }
                         )
 
-                        if (dotCol < BoardState.BOX_COLS) {
+                        if (dotCol < boardState.boxCols) {
                             val boxOwner = boardState.boxes[dotRow][dotCol]
                             val boxCoord = BoxCoordinate(dotRow, dotCol)
                             val ownerLetter = if (boxOwner != 0) {
@@ -1135,24 +1399,32 @@ private fun DotsAndBoxesGrid(
     }
 }
 
+/**
+ * Solid white circle dot with 8.dp radius (16.dp diameter).
+ */
 @Composable
 private fun DotNode(slotSize: Dp) {
     val palette = LocalGamePalette.current
-    val visualDotSize = (slotSize * 0.78f).coerceAtLeast(6.dp)
     Box(
         modifier = Modifier.size(slotSize),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(visualDotSize)
-                .shadow(elevation = 4.dp, shape = CircleShape, spotColor = palette.dotColor)
+                .size(slotSize)
+                .shadow(elevation = 3.dp, shape = CircleShape, spotColor = palette.dotColor)
                 .clip(CircleShape)
                 .background(palette.dotColor)
         )
     }
 }
 
+/**
+ * 6.dp thickness horizontal line:
+ * - Unselected: faint grey (20% opacity)
+ * - Player 1: Bright Cyan
+ * - Computer / Player 2: Neon Magenta
+ */
 @Composable
 private fun HorizontalEdgeCell(
     edge: EdgeCoordinate,
@@ -1181,14 +1453,14 @@ private fun HorizontalEdgeCell(
         targetValue = if (claimedBy != 0) {
             ownerColor
         } else if (showHover) {
-            activePlayerColor.copy(alpha = 0.75f)
+            activePlayerColor.copy(alpha = 0.65f)
         } else {
             palette.idleEdge
         },
         label = "hEdgeColor"
     )
 
-    val barThickness = if (claimedBy != 0 || showHover) 7.dp else 5.dp
+    val barThickness = 6.dp
 
     Box(
         modifier = Modifier
@@ -1239,6 +1511,12 @@ private fun HorizontalEdgeCell(
     }
 }
 
+/**
+ * 6.dp thickness vertical line:
+ * - Unselected: faint grey (20% opacity)
+ * - Player 1: Bright Cyan
+ * - Computer / Player 2: Neon Magenta
+ */
 @Composable
 private fun VerticalEdgeCell(
     edge: EdgeCoordinate,
@@ -1267,14 +1545,14 @@ private fun VerticalEdgeCell(
         targetValue = if (claimedBy != 0) {
             ownerColor
         } else if (showHover) {
-            activePlayerColor.copy(alpha = 0.75f)
+            activePlayerColor.copy(alpha = 0.65f)
         } else {
             palette.idleEdge
         },
         label = "vEdgeColor"
     )
 
-    val barThickness = if (claimedBy != 0 || showHover) 7.dp else 5.dp
+    val barThickness = 6.dp
 
     Box(
         modifier = Modifier
@@ -1325,6 +1603,9 @@ private fun VerticalEdgeCell(
     }
 }
 
+/**
+ * PlayableBoxCell filled with 40% opacity of the owning player's color when completed.
+ */
 @Composable
 private fun PlayableBoxCell(
     row: Int,
@@ -1337,16 +1618,17 @@ private fun PlayableBoxCell(
     size: Dp
 ) {
     val palette = LocalGamePalette.current
-    val baseFill = if (owner != 0) playerFillColor(owner) else Color.Transparent
     val accentColor = if (owner != 0) playerAccentColor(owner) else Color.Transparent
+    // 40% opacity fill of the owning player's color
+    val boxFillColor = if (owner != 0) accentColor.copy(alpha = 0.40f) else Color.Transparent
 
     val charJumpScale = remember { Animatable(0.2f) }
     LaunchedEffect(owner) {
         if (owner != 0) {
             charJumpScale.snapTo(0.25f)
             charJumpScale.animateTo(
-                targetValue = 1.82f,
-                animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing)
+                targetValue = 1.75f,
+                animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
             )
             charJumpScale.animateTo(
                 targetValue = 1.0f,
@@ -1361,7 +1643,7 @@ private fun PlayableBoxCell(
     }
 
     val comboBoxScale = if (isNewlyCaptured || isInComboChain) {
-        1f + (comboPulseFraction * 0.20f)
+        1f + (comboPulseFraction * 0.16f)
     } else {
         1f
     }
@@ -1374,22 +1656,8 @@ private fun PlayableBoxCell(
                 scaleX = comboBoxScale
                 scaleY = comboBoxScale
             }
-            .drawBehind {
-                if (owner != 0) {
-                    drawRoundRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                accentColor.copy(
-                                    alpha = (0.42f + comboPulseFraction * 0.45f).coerceIn(0f, 0.9f)
-                                ),
-                                baseFill
-                            )
-                        ),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx())
-                    )
-                }
-            }
             .clip(RoundedCornerShape(6.dp))
+            .background(boxFillColor)
             .then(
                 if ((isNewlyCaptured || isInComboChain) && owner != 0) {
                     Modifier.border(
@@ -1431,17 +1699,17 @@ private fun PlayableBoxCell(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Black,
                     fontSize = when {
-                        size >= 42.dp -> 18.sp
-                        size >= 26.dp -> 13.sp
-                        else -> 10.sp
+                        size >= 44.dp -> 18.sp
+                        size >= 28.dp -> 14.sp
+                        else -> 11.sp
                     },
                     shadow = Shadow(
                         color = accentColor,
                         offset = Offset.Zero,
-                        blurRadius = 18f
+                        blurRadius = 14f
                     )
                 ),
-                color = if (comboPulseFraction > 0.3f) palette.primaryText else accentColor,
+                color = palette.primaryText,
                 modifier = Modifier.scale(charJumpScale.value)
             )
         }
@@ -1463,7 +1731,7 @@ private fun GameOverBanner(
     }
 
     val titleText = if (winner != null && winner > 0) {
-        val winnerName = if (boardState.isPlayerAi(winner)) "CPU" else "Player $winner"
+        val winnerName = if (boardState.isPlayerAi(winner)) "Computer" else "Player $winner"
         stringResource(
             R.string.winner_banner_player,
             winnerName,
@@ -1480,28 +1748,28 @@ private fun GameOverBanner(
 
     Card(
         modifier = modifier
-            .border(2.dp, accentColor, RoundedCornerShape(18.dp))
+            .border(2.dp, accentColor, RoundedCornerShape(16.dp))
             .testTag("game_over_banner"),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = palette.surfaceElevated)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
                     imageVector = Icons.Filled.EmojiEvents,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 )
                 Column {
                     Text(
@@ -1521,10 +1789,10 @@ private fun GameOverBanner(
 
             Button(
                 onClick = onPlayAgain,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = accentColor,
-                    contentColor = Color.White
+                    contentColor = Color.Black
                 ),
                 modifier = Modifier.testTag("play_again_button")
             ) {
@@ -1597,7 +1865,7 @@ fun SingleFileHtmlDialog(
                 },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = palette.p1Accent,
-                    contentColor = Color.White
+                    contentColor = Color.Black
                 ),
                 modifier = Modifier.testTag("copy_html_button")
             ) {

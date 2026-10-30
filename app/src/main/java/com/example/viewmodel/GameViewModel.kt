@@ -8,6 +8,7 @@ import com.example.model.CpuDifficulty
 import com.example.model.DotsAndBoxesEngine
 import com.example.model.EdgeCoordinate
 import com.example.model.GameMode
+import com.example.model.GridSize
 import com.example.model.MoveOutcome
 import com.example.ui.theme.AppThemeMode
 import kotlinx.coroutines.Job
@@ -30,24 +31,41 @@ data class PlayerSessionStats(
     val ties: Int = 0
 )
 
+data class MatchHistoryItem(
+    val matchNumber: Int,
+    val gridSizeLabel: String,
+    val scoreSummary: String,
+    val winnerLabel: String,
+    val winnerPlayerNumber: Int
+)
+
 data class GameUiState(
-    val currentScreen: ScreenDestination = ScreenDestination.SETUP,
+    val currentScreen: ScreenDestination = ScreenDestination.GAME,
     val themeMode: AppThemeMode = AppThemeMode.CLASSIC_DARK,
     val soundEnabled: Boolean = true,
-    val selectedGameMode: GameMode = GameMode.PVP, // Default: Player vs Player
+    val selectedGridSize: GridSize = GridSize.SIZE_4X4,
+    val selectedGameMode: GameMode = GameMode.CPU, // Single Player vs Computer (Cyan vs Magenta)
     val selectedCpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
-    val selectedPlayerCount: Int = 2, // 1 = CPU Mode, 2..4 = PvP Mode
-    val playerInputs: List<String> = listOf("A", "B", "D", "E"),
+    val selectedPlayerCount: Int = 1, // 1 = CPU Mode, 2..4 = PvP Mode
+    val playerInputs: List<String> = listOf("A", "C", "D", "E"),
     val setupErrorResId: Int? = null,
-    val boardState: BoardState = BoardState.create(2, listOf("A", "B")),
+    val boardState: BoardState = BoardState.create(
+        humanPlayerCount = 1,
+        letters = listOf("A", "C"),
+        cpuDifficulty = CpuDifficulty.MEDIUM,
+        boxRows = GridSize.SIZE_4X4.boxRows,
+        boxCols = GridSize.SIZE_4X4.boxCols
+    ),
     val sessionStats: Map<Int, PlayerSessionStats> = mapOf(
         1 to PlayerSessionStats(),
         2 to PlayerSessionStats(),
         3 to PlayerSessionStats(),
         4 to PlayerSessionStats()
     ),
+    val matchHistory: List<MatchHistoryItem> = emptyList(),
+    val totalMatchesCompleted: Int = 0,
     val hoveredEdge: EdgeCoordinate? = null,
-    val boardZoom: Float = 0.92f,
+    val boardZoom: Float = 0.95f,
     val showHtmlDialog: Boolean = false
 )
 
@@ -85,6 +103,30 @@ class GameViewModel : ViewModel() {
         setSoundEnabled(!_uiState.value.soundEnabled)
     }
 
+    /**
+     * Changing the grid size mid-game automatically resets the board,
+     * clears all lines, and resets the score to 0-0.
+     */
+    fun selectGridSize(gridSize: GridSize) {
+        aiTurnJob?.cancel()
+        SoundEngine.playLineClick()
+        _uiState.update { state ->
+            val currentBoard = state.boardState
+            val letters = currentBoard.players.map { it.letter }
+            state.copy(
+                selectedGridSize = gridSize,
+                hoveredEdge = null,
+                boardState = BoardState.create(
+                    humanPlayerCount = currentBoard.humanPlayerCount,
+                    letters = letters,
+                    cpuDifficulty = state.selectedCpuDifficulty,
+                    boxRows = gridSize.boxRows,
+                    boxCols = gridSize.boxCols
+                )
+            )
+        }
+    }
+
     fun selectGameMode(mode: GameMode) {
         _uiState.update { state ->
             val updatedInputs = state.playerInputs.toMutableList()
@@ -104,9 +146,10 @@ class GameViewModel : ViewModel() {
     }
 
     fun selectCpuDifficulty(difficulty: CpuDifficulty) {
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            state.copy(
                 selectedCpuDifficulty = difficulty,
+                boardState = state.boardState.copy(cpuDifficulty = difficulty),
                 setupErrorResId = null
             )
         }
@@ -170,7 +213,9 @@ class GameViewModel : ViewModel() {
         val initialBoard = BoardState.create(
             humanPlayerCount = humanCount,
             letters = activeLetters,
-            cpuDifficulty = state.selectedCpuDifficulty
+            cpuDifficulty = state.selectedCpuDifficulty,
+            boxRows = state.selectedGridSize.boxRows,
+            boxCols = state.selectedGridSize.boxCols
         )
 
         _uiState.update {
@@ -208,17 +253,54 @@ class GameViewModel : ViewModel() {
         }
 
         _uiState.update { state ->
-            val updatedStats = if (newBoard.isGameOver && !state.boardState.isGameOver) {
+            val justFinished = newBoard.isGameOver && !state.boardState.isGameOver
+            val updatedStats = if (justFinished) {
                 recordMatchResult(state.sessionStats, newBoard)
             } else {
                 state.sessionStats
             }
+            val nextMatchCount = if (justFinished) {
+                state.totalMatchesCompleted + 1
+            } else {
+                state.totalMatchesCompleted
+            }
+            val updatedHistory = if (justFinished) {
+                val entry = buildMatchHistoryItem(nextMatchCount, newBoard)
+                (listOf(entry) + state.matchHistory).take(5)
+            } else {
+                state.matchHistory
+            }
             state.copy(
                 boardState = newBoard,
                 sessionStats = updatedStats,
+                matchHistory = updatedHistory,
+                totalMatchesCompleted = nextMatchCount,
                 hoveredEdge = null
             )
         }
+    }
+
+    private fun buildMatchHistoryItem(
+        matchNumber: Int,
+        finishedBoard: BoardState
+    ): MatchHistoryItem {
+        val winnerNum = finishedBoard.winner ?: 0
+        val winnerLabel = when {
+            winnerNum == 0 -> "Tie Game"
+            finishedBoard.isPlayerAi(winnerNum) -> "Computer (${finishedBoard.letterForPlayer(winnerNum)})"
+            else -> "Player $winnerNum (${finishedBoard.letterForPlayer(winnerNum)})"
+        }
+        val scoreSummary = finishedBoard.players.joinToString(" - ") { player ->
+            val pName = if (player.isAi) "CPU" else "P${player.playerNumber}"
+            "$pName: ${finishedBoard.scoreForPlayer(player.playerNumber)}"
+        }
+        return MatchHistoryItem(
+            matchNumber = matchNumber,
+            gridSizeLabel = "${finishedBoard.boxRows}×${finishedBoard.boxCols}",
+            scoreSummary = scoreSummary,
+            winnerLabel = winnerLabel,
+            winnerPlayerNumber = winnerNum
+        )
     }
 
     private fun recordMatchResult(
@@ -240,16 +322,13 @@ class GameViewModel : ViewModel() {
         return mutable
     }
 
-    /**
-     * Naturally delayed CPU action loop (600ms to 1000ms per move).
-     */
     private fun scheduleCpuTurnIfNeeded() {
         aiTurnJob?.cancel()
         if (!_uiState.value.boardState.isCurrentPlayerAi) return
 
         aiTurnJob = viewModelScope.launch {
             while (_uiState.value.boardState.isCurrentPlayerAi && !_uiState.value.boardState.isGameOver) {
-                val naturalDelayMs = Random.nextLong(600L, 1001L)
+                val naturalDelayMs = Random.nextLong(480L, 780L)
                 delay(naturalDelayMs)
                 val latestBoard = _uiState.value.boardState
                 if (!latestBoard.isCurrentPlayerAi || latestBoard.isGameOver) break
@@ -279,7 +358,8 @@ class GameViewModel : ViewModel() {
     fun restartMatch() {
         aiTurnJob?.cancel()
         SoundEngine.playLineClick()
-        val currentBoard = _uiState.value.boardState
+        val state = _uiState.value
+        val currentBoard = state.boardState
         val letters = currentBoard.players.map { it.letter }
         _uiState.update {
             it.copy(
@@ -287,7 +367,9 @@ class GameViewModel : ViewModel() {
                 boardState = BoardState.create(
                     humanPlayerCount = currentBoard.humanPlayerCount,
                     letters = letters,
-                    cpuDifficulty = currentBoard.cpuDifficulty
+                    cpuDifficulty = state.selectedCpuDifficulty,
+                    boxRows = state.selectedGridSize.boxRows,
+                    boxCols = state.selectedGridSize.boxCols
                 )
             )
         }
