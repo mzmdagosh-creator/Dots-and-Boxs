@@ -2293,21 +2293,25 @@ fun CommandCenterScreen(
                 onQuickMatchClick = onOpenQuickMatch
             )
 
-            CampaignStageSelectorCard(
+                        CampaignStageSelectorCard(
                 unlockedCampaignLevel = unlockedCampaignLevel,
                 selectedCampaignLevel = selectedCampaignLevel,
                 onSelectCampaignLevel = onSelectCampaignLevel,
                 onStartCampaignLevel = onStartCampaignLevel
             )
 
-            DashboardSessionHistoryCard(
             DashboardAchievementsCard(
                 unlockedIds = unlockedAchievements
-            ),
+            )
+
+            DashboardSessionHistoryCard(
                 sessionStats = sessionStats,
                 matchHistory = matchHistory
             )
         }
+    }
+}
+
     }
 }
 
