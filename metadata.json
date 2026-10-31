@@ -1,5 +1,5 @@
 {
-  "name": "Neon Grid Protocol",
+  "name": "Dots And Boxes",
   "description": "Neon Grid Protocol — cyberpunk tactical grid strategy game with Campaign progression, Quick Match arena, timed modes, and Minimax AI.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

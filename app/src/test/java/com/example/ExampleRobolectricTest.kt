@@ -17,7 +17,7 @@ class ExampleRobolectricTest {
     @Test
     fun `read string from context and verify credits strings`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        assertEquals("Neon Grid Protocol", context.getString(R.string.app_name))
+        assertEquals("Dots And Boxes", context.getString(R.string.app_name))
         assertEquals(
             "Design & Development: [Your Name/Handle]",
             context.getString(R.string.credits_design_dev)
@@ -56,6 +56,25 @@ class ExampleRobolectricTest {
         assertTrue(viewModel.uiState.value.hapticsEnabled)
         viewModel.toggleHaptics()
         assertFalse(viewModel.uiState.value.hapticsEnabled)
+
+        // Volume & Camera Shake Settings
+        viewModel.openSettingsScreen()
+        assertEquals(ScreenDestination.SETTINGS, viewModel.uiState.value.currentScreen)
+        viewModel.setSoundVolume(0.45f)
+        assertEquals(0.45f, viewModel.uiState.value.soundVolume, 0.001f)
+        assertEquals(0.45f, SoundEngine.masterVolume, 0.001f)
+        viewModel.setCameraShakeEnabled(false)
+        assertFalse(viewModel.uiState.value.cameraShakeEnabled)
+        viewModel.closeSettingsScreen()
+        assertEquals(ScreenDestination.SETUP, viewModel.uiState.value.currentScreen)
+
+        // Replay Tutorial sets hasSeenTutorial to false and routes to SETUP
+        viewModel.completeTutorial()
+        assertTrue(viewModel.uiState.value.hasSeenTutorial)
+        viewModel.openSettingsScreen()
+        viewModel.replayTutorial()
+        assertFalse(viewModel.uiState.value.hasSeenTutorial)
+        assertEquals(ScreenDestination.SETUP, viewModel.uiState.value.currentScreen)
 
         // Navigate to Credits Screen and Back
         viewModel.openCreditsScreen()

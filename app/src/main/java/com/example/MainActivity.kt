@@ -65,19 +65,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material.icons.filled.Tune
@@ -98,6 +102,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Typography
@@ -108,6 +116,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -413,8 +422,11 @@ object SoundEngine {
     @Volatile
     var isSoundEnabled: Boolean = true
 
+    @Volatile
+    var masterVolume: Float = 1.0f
+
     fun playLineClick() {
-        if (!isSoundEnabled) return
+        if (!isSoundEnabled || masterVolume <= 0f) return
         audioScope.launch {
             runCatching {
                 val samples = synthesizeFrequencySweep(540.0, 170.0, 38, 0.28, 45.0)
@@ -424,7 +436,7 @@ object SoundEngine {
     }
 
     fun playBoxPop(comboCount: Int = 1) {
-        if (!isSoundEnabled) return
+        if (!isSoundEnabled || masterVolume <= 0f) return
         audioScope.launch {
             runCatching {
                 val pitchMultiplier = (1.0 + (comboCount.coerceAtLeast(1) - 1) * 0.12).coerceAtMost(1.85)
@@ -435,7 +447,7 @@ object SoundEngine {
     }
 
     fun playGameEndFanfare() {
-        if (!isSoundEnabled) return
+        if (!isSoundEnabled || masterVolume <= 0f) return
         audioScope.launch {
             runCatching {
                 val notes = listOf(523.25 to 110, 659.25 to 110, 783.99 to 110, 1046.50 to 290)
@@ -457,20 +469,21 @@ object SoundEngine {
         val numSamples = ((SAMPLE_RATE * durationMs) / 1000).coerceAtLeast(1)
         val buffer = ShortArray(numSamples)
         var phase = 0.0
+        val effectiveAmplitude = amplitude * masterVolume.coerceIn(0f, 1f).toDouble()
         for (i in 0 until numSamples) {
             val progress = i.toDouble() / numSamples
             val instantFreq = startFreqHz + (endFreqHz - startFreqHz) * progress
             phase += (2.0 * PI * instantFreq) / SAMPLE_RATE
             val attack = (i / (SAMPLE_RATE * 0.004)).coerceAtMost(1.0)
             val envelope = attack * exp(-decayRate * progress)
-            val sampleValue = (sin(phase) * amplitude * envelope * Short.MAX_VALUE).toInt()
+            val sampleValue = (sin(phase) * effectiveAmplitude * envelope * Short.MAX_VALUE).toInt()
             buffer[i] = sampleValue.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
         return buffer
     }
 
     private fun playPcmBuffer(samples: ShortArray) {
-        if (samples.isEmpty()) return
+        if (samples.isEmpty() || masterVolume <= 0f) return
         val byteSize = samples.size * 2
         val track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -909,7 +922,7 @@ object DotsAndBoxesEngine {
         countClaimedSides(boxRow, boxCol, hEdges, vEdges) == 4
 }
 
-enum class ScreenDestination { SETUP, QUICK_CONFIG, GAME, CREDITS }
+enum class ScreenDestination { SETUP, QUICK_CONFIG, GAME, CREDITS, SETTINGS }
 enum class MainMenuSection { CAMPAIGN, QUICK_MATCH }
 enum class HapticEventType { LINE_TICK, BOX_CAPTURE_BUZZ, VICTORY_CELEBRATION }
 
@@ -924,7 +937,9 @@ data class GameUiState(
     val achievementToastQueue: List<AchievementProtocol> = emptyList(),
     val mainMenuSection: MainMenuSection = MainMenuSection.CAMPAIGN,
     val soundEnabled: Boolean = true,
+    val soundVolume: Float = 1.0f,
     val hapticsEnabled: Boolean = true,
+    val cameraShakeEnabled: Boolean = true,
     val totalBoxesCaptured: Int = 0,
     val unlockedCampaignLevel: Int = 1,
     val selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
@@ -958,6 +973,8 @@ class GameViewModel : ViewModel() {
         const val KEY_UNLOCKED_LEVEL = "unlocked_campaign_level"
         const val KEY_TOTAL_BOXES_CAPTURED = "total_boxes_captured"
         const val KEY_HAPTICS_ENABLED = "haptics_enabled"
+        const val KEY_CAMERA_SHAKE_ENABLED = "camera_shake_enabled"
+        const val KEY_SOUND_VOLUME = "sound_volume"
         const val KEY_SESSION_STATS_JSON = "dots_and_boxes_session_stats"
         const val KEY_MATCH_HISTORY_JSON = "dots_and_boxes_match_history"
         const val KEY_TOTAL_MATCHES = "dots_and_boxes_total_matches"
@@ -978,6 +995,8 @@ class GameViewModel : ViewModel() {
         val savedLevel = prefs.getInt(KEY_UNLOCKED_LEVEL, 1).coerceIn(1, CampaignLevel.entries.size)
         val savedBoxes = prefs.getInt(KEY_TOTAL_BOXES_CAPTURED, 0).coerceAtLeast(0)
         val savedHaptics = prefs.getBoolean(KEY_HAPTICS_ENABLED, true)
+        val savedCameraShake = prefs.getBoolean(KEY_CAMERA_SHAKE_ENABLED, true)
+        val savedSoundVolume = prefs.getFloat(KEY_SOUND_VOLUME, 1.0f).coerceIn(0f, 1f)
         val loadedStats = loadSessionStatsFromPrefs(prefs)
         val loadedHistory = loadMatchHistoryFromPrefs(prefs)
         val savedTotalMatches = prefs.getInt(KEY_TOTAL_MATCHES, loadedHistory.maxOfOrNull { it.matchNumber } ?: 0).coerceAtLeast(0)
@@ -985,6 +1004,8 @@ class GameViewModel : ViewModel() {
         val savedTutorial = prefs.getBoolean(KEY_HAS_SEEN_TUTORIAL, false)
 
         HapticEngine.isHapticsEnabled = savedHaptics
+        SoundEngine.masterVolume = savedSoundVolume
+        SoundEngine.isSoundEnabled = savedSoundVolume > 0.001f
         _uiState.update { state ->
             val effectiveLevel = max(state.unlockedCampaignLevel, savedLevel)
             state.copy(
@@ -992,6 +1013,9 @@ class GameViewModel : ViewModel() {
                 selectedCampaignLevel = CampaignLevel.fromNumber(effectiveLevel),
                 totalBoxesCaptured = max(state.totalBoxesCaptured, savedBoxes),
                 hapticsEnabled = savedHaptics,
+                cameraShakeEnabled = savedCameraShake,
+                soundVolume = savedSoundVolume,
+                soundEnabled = savedSoundVolume > 0.001f,
                 sessionStats = loadedStats ?: state.sessionStats,
                 matchHistory = if (loadedHistory.isNotEmpty()) loadedHistory else state.matchHistory,
                 totalMatchesCompleted = max(state.totalMatchesCompleted, savedTotalMatches),
@@ -1142,6 +1166,41 @@ class GameViewModel : ViewModel() {
         _uiState.update { it.copy(hasSeenTutorial = true) }
     }
 
+    fun replayTutorial() {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        sharedPreferences?.edit()?.putBoolean(KEY_HAS_SEEN_TUTORIAL, false)?.apply()
+        _uiState.update { it.copy(hasSeenTutorial = false, currentScreen = ScreenDestination.SETUP) }
+    }
+
+    fun openSettingsScreen() {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update { it.copy(currentScreen = ScreenDestination.SETTINGS) }
+    }
+
+    fun closeSettingsScreen() {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update { it.copy(currentScreen = ScreenDestination.SETUP) }
+    }
+
+    fun setSoundVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        SoundEngine.masterVolume = clamped
+        val enabled = clamped > 0.001f
+        SoundEngine.isSoundEnabled = enabled
+        sharedPreferences?.edit()?.putFloat(KEY_SOUND_VOLUME, clamped)?.apply()
+        _uiState.update { it.copy(soundVolume = clamped, soundEnabled = enabled) }
+    }
+
+    fun setCameraShakeEnabled(enabled: Boolean) {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        sharedPreferences?.edit()?.putBoolean(KEY_CAMERA_SHAKE_ENABLED, enabled)?.apply()
+        _uiState.update { it.copy(cameraShakeEnabled = enabled) }
+    }
+
     fun selectPlayerCount(count: Int) {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
@@ -1213,7 +1272,9 @@ class GameViewModel : ViewModel() {
 
     fun setSoundEnabled(enabled: Boolean) {
         SoundEngine.isSoundEnabled = enabled
-        _uiState.update { it.copy(soundEnabled = enabled) }
+        val effectiveVol = if (enabled && _uiState.value.soundVolume <= 0.001f) 1.0f else _uiState.value.soundVolume
+        SoundEngine.masterVolume = if (enabled) effectiveVol else 0f
+        _uiState.update { it.copy(soundEnabled = enabled, soundVolume = if (enabled) effectiveVol else it.soundVolume) }
         if (enabled) SoundEngine.playLineClick()
     }
 
@@ -1627,8 +1688,6 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                 when (destination) {
                     ScreenDestination.SETUP -> {
                         CommandCenterScreen(
-                            hasSeenTutorial = uiState.hasSeenTutorial,
-                            onCompleteTutorial = viewModel::completeTutorial,
                             unlockedAchievements = uiState.unlockedAchievements,
                             nodesCaptured = uiState.totalBoxesCaptured,
                             unlockedCampaignLevel = uiState.unlockedCampaignLevel,
@@ -1637,6 +1696,7 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             matchHistory = uiState.matchHistory,
                             onResumeCampaign = viewModel::resumeTournament,
                             onOpenQuickMatch = viewModel::openQuickMatchConfig,
+                            onOpenSettings = viewModel::openSettingsScreen,
                             onSelectCampaignLevel = viewModel::selectCampaignLevel,
                             onStartCampaignLevel = viewModel::startCampaignLevel
                         )
@@ -1657,8 +1717,11 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                     }
                     ScreenDestination.GAME -> {
                         GridArenaScreen(
+                            hasSeenTutorial = uiState.hasSeenTutorial,
+                            onCompleteTutorial = viewModel::completeTutorial,
                             soundEnabled = uiState.soundEnabled,
                             hapticsEnabled = uiState.hapticsEnabled,
+                            cameraShakeEnabled = uiState.cameraShakeEnabled,
                             activeCampaignLevel = uiState.activeCampaignLevel,
                             justUnlockedNextCampaignLevel = uiState.justUnlockedNextCampaignLevel,
                             selectedGridSize = uiState.selectedGridSize,
@@ -1690,6 +1753,20 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                     ScreenDestination.CREDITS -> {
                         CreditsScreen(onBack = viewModel::closeCreditsScreen)
                     }
+                    ScreenDestination.SETTINGS -> {
+                        SettingsScreen(
+                            soundVolume = uiState.soundVolume,
+                            hapticsEnabled = uiState.hapticsEnabled,
+                            cameraShakeEnabled = uiState.cameraShakeEnabled,
+                            onSoundVolumeChange = viewModel::setSoundVolume,
+                            onHapticsEnabledChange = viewModel::setHapticsEnabled,
+                            onCameraShakeEnabledChange = viewModel::setCameraShakeEnabled,
+                            onReplayTutorial = viewModel::replayTutorial,
+                            onWipeSaveData = viewModel::clearPersistentData,
+                            onOpenCredits = viewModel::openCreditsScreen,
+                            onBackToCommandCenter = viewModel::closeSettingsScreen
+                        )
+                    }
                 }
             }
         }
@@ -1698,8 +1775,6 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
 
 @Composable
 fun CommandCenterScreen(
-    hasSeenTutorial: Boolean = false,
-    onCompleteTutorial: () -> Unit = {},
     unlockedAchievements: Set<String> = emptySet(),
     nodesCaptured: Int = 0,
     unlockedCampaignLevel: Int = 1,
@@ -1708,6 +1783,7 @@ fun CommandCenterScreen(
     matchHistory: List<MatchHistoryItem> = emptyList(),
     onResumeCampaign: () -> Unit = {},
     onOpenQuickMatch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onSelectCampaignLevel: (CampaignLevel) -> Unit = {},
     onStartCampaignLevel: (CampaignLevel) -> Unit = {},
     modifier: Modifier = Modifier
@@ -1772,7 +1848,10 @@ fun CommandCenterScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            CommandCenterHeader(glowAlpha = headerGlow)
+            CommandCenterHeader(
+                glowAlpha = headerGlow,
+                onOpenSettings = onOpenSettings
+            )
 
             CommandCenterStatsRow(
                 nodesCaptured = nodesCaptured,
@@ -1801,49 +1880,16 @@ fun CommandCenterScreen(
                 matchHistory = matchHistory
             )
         }
-        
-        if (!hasSeenTutorial) {
-            NeonTutorialOverlay(onDismiss = onCompleteTutorial)
-        }
     }
 }
 
 @Composable
-fun NeonTutorialOverlay(onDismiss: () -> Unit) {
-    val palette = LocalGamePalette.current
+private fun CommandCenterHeader(
+    glowAlpha: Float,
+    onOpenSettings: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {} 
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            modifier = Modifier.widthIn(max = 400.dp).border(2.dp, ProtocolCyan, RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = palette.surfaceElevated)
-        ) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = ProtocolCyan, modifier = Modifier.size(48.dp))
-                Text("SYSTEM BOOT: TUTORIAL", style = MaterialTheme.typography.headlineMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black), color = ProtocolCyan, textAlign = TextAlign.Center)
-                Text("1. Tap between glowing dots to draw a line.\n2. Draw the 4th line to complete a box.\n3. Capturing a box grants an EXTRA TURN.\n4. Chain captures for PROTOCOL OVERDRIVE combos!\n5. Outscore the CPU or your friends to win.", style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp), color = palette.primaryText)
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth().height(50.dp).padding(top = 8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ProtocolCyan, contentColor = Color.Black),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("INITIALIZE PROTOCOL", style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommandCenterHeader(glowAlpha: Float, modifier: Modifier = Modifier) {
-    Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
@@ -1853,34 +1899,58 @@ private fun CommandCenterHeader(glowAlpha: Float, modifier: Modifier = Modifier)
                 brush = Brush.linearGradient(colors = listOf(ProtocolCyan.copy(alpha = glowAlpha), ProtocolMagenta.copy(alpha = glowAlpha))),
                 shape = RoundedCornerShape(22.dp)
             )
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
-        Text(
-            text = "DOTS AND BOXES",
-            style = MaterialTheme.typography.displayLarge.copy(
-                fontFamily = JetBrainsMonoFontFamily,
-                fontWeight = FontWeight.Black,
-                fontSize = 27.sp,
-                letterSpacing = 2.4.sp,
-                shadow = Shadow(color = ProtocolCyan.copy(alpha = glowAlpha), offset = Offset.Zero, blurRadius = 28f)
-            ),
-            color = ProtocolTextPrimary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("neon_protocol_title")
-        )
-        Text(
-            text = "THE COMMAND CENTER",
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = JetBrainsMonoFontFamily,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.6.sp,
-                shadow = Shadow(color = ProtocolMagenta.copy(alpha = 0.75f), offset = Offset.Zero, blurRadius = 14f)
-            ),
-            color = ProtocolMagenta,
-            textAlign = TextAlign.Center
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 44.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "DOTS AND BOXES",
+                style = MaterialTheme.typography.displayLarge.copy(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 25.sp,
+                    letterSpacing = 2.0.sp,
+                    shadow = Shadow(color = ProtocolCyan.copy(alpha = glowAlpha), offset = Offset.Zero, blurRadius = 28f)
+                ),
+                color = ProtocolTextPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("neon_protocol_title")
+            )
+            Text(
+                text = "THE COMMAND CENTER",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.6.sp,
+                    shadow = Shadow(color = ProtocolMagenta.copy(alpha = 0.75f), offset = Offset.Zero, blurRadius = 14f)
+                ),
+                color = ProtocolMagenta,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        IconButton(
+            onClick = onOpenSettings,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(ProtocolElevatedSurface)
+                .border(1.dp, ProtocolCyan.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+                .testTag("open_settings_button")
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = "Settings",
+                tint = ProtocolCyan,
+                modifier = Modifier.size(22.dp)
+            )
+        }
     }
 }
 
@@ -2432,6 +2502,381 @@ fun DriftingNeonDotsBackground(modifier: Modifier = Modifier) {
 }
 
 @Composable
+fun SettingsScreen(
+    soundVolume: Float,
+    hapticsEnabled: Boolean,
+    cameraShakeEnabled: Boolean,
+    onSoundVolumeChange: (Float) -> Unit,
+    onHapticsEnabledChange: (Boolean) -> Unit,
+    onCameraShakeEnabledChange: (Boolean) -> Unit,
+    onReplayTutorial: () -> Unit,
+    onWipeSaveData: () -> Unit,
+    onOpenCredits: () -> Unit = {},
+    onBackToCommandCenter: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalGamePalette.current
+    val scrollState = rememberScrollState()
+    var wipeConfirmTriggered by remember { mutableStateOf(false) }
+
+    BackHandler { onBackToCommandCenter() }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF121212))
+            .testTag("settings_screen"),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        DriftingNeonDotsBackground()
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 560.dp)
+                .verticalScroll(scrollState)
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                OutlinedButton(
+                    onClick = onBackToCommandCenter,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolTextPrimary),
+                    modifier = Modifier.height(48.dp).testTag("settings_top_back_button")
+                ) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Command Center", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Command Center", style = MaterialTheme.typography.labelLarge)
+                }
+                Text(
+                    text = "SYSTEM SETTINGS",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Black,
+                        color = ProtocolCyan
+                    )
+                )
+            }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, ProtocolCyan.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                    .testTag("settings_card"),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    // 1. AUDIO: Continuous Volume Slider (0f..1f)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(ProtocolElevatedSurface)
+                            .border(1.dp, ProtocolBorder, RoundedCornerShape(14.dp))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (soundVolume > 0.001f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                                    contentDescription = null,
+                                    tint = ProtocolCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "AUDIO SYNTHESIZER VOLUME",
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = ProtocolTextPrimary
+                                    )
+                                    Text(
+                                        text = "Master procedural sound engine gain",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ProtocolTextMuted
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "${(soundVolume * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Black
+                                ),
+                                color = ProtocolCyan,
+                                modifier = Modifier.testTag("settings_volume_percentage")
+                            )
+                        }
+
+                        Slider(
+                            value = soundVolume.coerceIn(0f, 1f),
+                            onValueChange = onSoundVolumeChange,
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = ProtocolCyan,
+                                activeTrackColor = ProtocolCyan,
+                                inactiveTrackColor = ProtocolDarkBackground
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("settings_volume_slider")
+                        )
+                    }
+
+                    // 2. HAPTICS: Toggle for Haptics
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(ProtocolElevatedSurface)
+                            .border(
+                                width = 1.dp,
+                                color = if (hapticsEnabled) ProtocolCyan.copy(alpha = 0.6f) else ProtocolBorder,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .clickable { onHapticsEnabledChange(!hapticsEnabled) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .testTag("settings_haptics_row"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Vibration,
+                                contentDescription = null,
+                                tint = if (hapticsEnabled) ProtocolCyan else ProtocolTextMuted,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Haptics",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = ProtocolTextPrimary
+                                )
+                                Text(
+                                    text = "Tactile feedback on line draws and node captures",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ProtocolTextMuted
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = hapticsEnabled,
+                            onCheckedChange = onHapticsEnabledChange,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = ProtocolCyan,
+                                uncheckedThumbColor = ProtocolTextMuted,
+                                uncheckedTrackColor = ProtocolDarkBackground
+                            ),
+                            modifier = Modifier.testTag("settings_haptics_switch")
+                        )
+                    }
+
+                    // 3. PERFORMANCE: Toggle for "Camera Shake (Disable for performance)"
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(ProtocolElevatedSurface)
+                            .border(
+                                width = 1.dp,
+                                color = if (cameraShakeEnabled) ProtocolMagenta.copy(alpha = 0.6f) else ProtocolBorder,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .clickable { onCameraShakeEnabledChange(!cameraShakeEnabled) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .testTag("settings_camera_shake_row"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Bolt,
+                                contentDescription = null,
+                                tint = if (cameraShakeEnabled) ProtocolMagenta else ProtocolTextMuted,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Camera Shake (Disable for performance)",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = ProtocolTextPrimary
+                                )
+                                Text(
+                                    text = "Kinetic arena recoil during node captures and overdrive combos",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ProtocolTextMuted
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = cameraShakeEnabled,
+                            onCheckedChange = onCameraShakeEnabledChange,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = ProtocolMagenta,
+                                uncheckedThumbColor = ProtocolTextMuted,
+                                uncheckedTrackColor = ProtocolDarkBackground
+                            ),
+                            modifier = Modifier.testTag("settings_camera_shake_switch")
+                        )
+                    }
+
+                    // 4. DATA & TUTORIAL: "Replay Tutorial" and "Wipe Save Data"
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "DATA & PROTOCOL MANAGEMENT",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = ProtocolAmber
+                        )
+
+                        Button(
+                            onClick = onReplayTutorial,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ProtocolCyan,
+                                contentColor = Color.Black
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("replay_tutorial_button")
+                        ) {
+                            Icon(imageVector = Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Replay Tutorial",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Black
+                                )
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                onWipeSaveData()
+                                wipeConfirmTriggered = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ProtocolMagenta,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("wipe_save_data_button")
+                        ) {
+                            Icon(imageVector = Icons.Filled.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (wipeConfirmTriggered) "Save Data Wiped!" else "Wipe Save Data",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Black
+                                )
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = onOpenCredits,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolTextPrimary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("settings_open_credits_button")
+                        ) {
+                            Icon(imageVector = Icons.Filled.Code, contentDescription = null, tint = ProtocolCyan, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "System Credits",
+                                style = MaterialTheme.typography.labelLarge.copy(fontFamily = JetBrainsMonoFontFamily)
+                            )
+                        }
+                    }
+
+                    // 5. Back to Command Center Button
+                    OutlinedButton(
+                        onClick = onBackToCommandCenter,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolCyan),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .border(1.5.dp, ProtocolCyan, RoundedCornerShape(14.dp))
+                            .testTag("settings_back_to_command_center_button")
+                    ) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Back to Command Center",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Black
+                            )
+                        )
+                    }
+                }
+            }
+
+            // 6. Version Label at the very bottom
+            Text(
+                text = "v2.0.0 - Neon Overdrive",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    letterSpacing = 1.2.sp
+                ),
+                color = palette.mutedText.copy(alpha = 0.75f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(top = 4.dp, bottom = 8.dp)
+                    .testTag("settings_version_label")
+            )
+        }
+    }
+}
+
+@Composable
 fun CreditsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val palette = LocalGamePalette.current
     val scrollState = rememberScrollState()
@@ -2442,7 +2887,7 @@ fun CreditsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
     Box(modifier = modifier.fillMaxSize().background(Color(0xFF121212)).testTag("credits_screen"), contentAlignment = Alignment.Center) {
         DriftingNeonDotsBackground()
-        Column(modifier = Modifier.fillMaxWidth().widthIn(max = 540.dp).verticalScroll(scrollState).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(modifier = Modifier.fillMaxWidth().widthIn(max = 540.dp).verticalScroll(scrollState).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth().shadow(24.dp, RoundedCornerShape(26.dp), spotColor = palette.p1Accent.copy(alpha = borderGlow)).border(width = 2.5.dp, brush = Brush.linearGradient(colors = listOf(palette.p1Accent.copy(alpha = borderGlow), palette.p2Accent.copy(alpha = borderGlow), palette.p1Accent.copy(alpha = borderGlow))), shape = RoundedCornerShape(26.dp)).testTag("credits_screen_card"),
                 shape = RoundedCornerShape(26.dp),
@@ -2470,6 +2915,17 @@ fun CreditsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             Text(text = "BACK", style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp))
                         }
                     }
+
+                    Text(
+                        text = "v2.0.0 - Neon Overdrive",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            letterSpacing = 1.2.sp
+                        ),
+                        color = palette.mutedText.copy(alpha = 0.75f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.testTag("credits_version_label")
+                    )
                 }
             }
         }
@@ -2491,7 +2947,9 @@ private fun CreditSectionCard(icon: ImageVector, text: String, accentColor: Colo
 
 @Composable
 fun GridArenaScreen(
-    soundEnabled: Boolean, hapticsEnabled: Boolean, activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
+    hasSeenTutorial: Boolean = false,
+    onCompleteTutorial: () -> Unit = {},
+    soundEnabled: Boolean, hapticsEnabled: Boolean, cameraShakeEnabled: Boolean = true, activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
     selectedGridSize: GridSize, selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
     blitzRemainingSeconds: Float, blitzRemainingFraction: Float, lastTurnForfeitedByTimeout: Boolean,
     boardState: BoardState, hoveredEdge: EdgeCoordinate?, boardZoom: Float, lastHapticEvent: HapticEvent?, victoryAnimationTriggerId: Int,
@@ -2568,16 +3026,23 @@ fun GridArenaScreen(
     val overlayBurstScale = remember { Animatable(0f) }
     val overlayBurstAlpha = remember { Animatable(0f) }
 
-    LaunchedEffect(boardState.comboTriggerId) {
+    LaunchedEffect(boardState.comboTriggerId, cameraShakeEnabled) {
+        if (!cameraShakeEnabled) {
+            cameraShakeAnim.snapTo(0f)
+        }
         if (boardState.comboTriggerId > 0) {
             val isCombo = boardState.currentComboCount >= 2 || boardState.lastCapturedBoxes.size >= 2
             val targetZoomPunch = if (isCombo) 1.04f + (boardState.currentComboCount.coerceAtMost(6) * 0.007f) else 1.015f
 
-            launch {
-                val shakeMagnitude = if (isCombo) 8f else 3.5f
-                for (step in listOf(1f, -0.85f, 0.7f, -0.5f, 0.3f, 0f)) {
-                    cameraShakeAnim.animateTo(targetValue = step * shakeMagnitude, animationSpec = tween(durationMillis = 40))
+            if (cameraShakeEnabled) {
+                launch {
+                    val shakeMagnitude = if (isCombo) 8f else 3.5f
+                    for (step in listOf(1f, -0.85f, 0.7f, -0.5f, 0.3f, 0f)) {
+                        cameraShakeAnim.animateTo(targetValue = step * shakeMagnitude, animationSpec = tween(durationMillis = 40))
+                    }
                 }
+            } else {
+                cameraShakeAnim.snapTo(0f)
             }
 
             launch {
@@ -2631,6 +3096,70 @@ fun GridArenaScreen(
                 comboHeartbeatScale = comboHeartbeatScale,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            AnimatedVisibility(visible = !hasSeenTutorial) {
+                val hasThreeSidedBox = (0 until boardState.boxRows).any { r ->
+                    (0 until boardState.boxCols).any { c ->
+                        var sides = 0
+                        if (boardState.horizontalEdges[r][c] != 0) sides++
+                        if (boardState.horizontalEdges[r + 1][c] != 0) sides++
+                        if (boardState.verticalEdges[r][c] != 0) sides++
+                        if (boardState.verticalEdges[r][c + 1] != 0) sides++
+                        sides == 3
+                    }
+                }
+                val tutorialMessage = when {
+                    boardState.currentComboCount > 0 -> "NODE CAPTURED! You earned an EXTRA TURN."
+                    hasThreeSidedBox -> "CRITICAL: Draw the 4th line to capture the node!"
+                    boardState.totalMovesPlayed == 0 -> "TUTORIAL: Tap between dots to draw a line."
+                    else -> "Take turns drawing lines. Capture the most nodes to win."
+                }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp)
+                        .shadow(elevation = 12.dp, shape = RoundedCornerShape(14.dp), spotColor = ProtocolCyan.copy(alpha = neonGlowPulse))
+                        .border(1.5.dp, ProtocolCyan, RoundedCornerShape(14.dp))
+                        .testTag("holographic_tutorial_banner"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = tutorialMessage,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                shadow = Shadow(color = ProtocolCyan.copy(alpha = 0.65f), offset = Offset.Zero, blurRadius = 10f)
+                            ),
+                            color = ProtocolCyan,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("holographic_tutorial_text")
+                        )
+                        IconButton(
+                            onClick = onCompleteTutorial,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("dismiss_tutorial_banner_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "Complete Tutorial",
+                                tint = ProtocolCyan
+                            )
+                        }
+                    }
+                }
+            }
 
             AnimatedVisibility(visible = boardState.isGameOver, enter = fadeIn() + scaleIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))) {
                 GameOverBanner(boardState = boardState, activeCampaignLevel = activeCampaignLevel, justUnlockedNextCampaignLevel = justUnlockedNextCampaignLevel, onAdvanceToNextCampaignLevel = onAdvanceToNextCampaignLevel, onPlayAgain = onRestartMatch, modifier = Modifier.fillMaxWidth())
