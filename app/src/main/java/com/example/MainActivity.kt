@@ -2090,7 +2090,7 @@ fun NeonGridProtocolApp(
                 label = "neonGridProtocolScreenTransition"
             ) { destination ->
                 when (destination) {
-                     // Screen 1: The Command Center (Main Menu)
+                    // Screen 1: The Command Center (Main Menu)
                     ScreenDestination.SETUP -> {
                         CommandCenterScreen(
                             unlockedAchievements = uiState.unlockedAchievements,
@@ -2175,10 +2175,10 @@ fun NeonGridProtocolApp(
 // ============================================================================
 
 @Composable
+@Composable
 fun CommandCenterScreen(
-    nodesCaptured: Int = 0,
     unlockedAchievements: Set<String> = emptySet(),
-
+    nodesCaptured: Int = 0,
     unlockedCampaignLevel: Int = 1,
     selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
     sessionStats: Map<Int, PlayerSessionStats> = emptyMap(),
@@ -2189,6 +2189,7 @@ fun CommandCenterScreen(
     onStartCampaignLevel: (CampaignLevel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+
     val scrollState = rememberScrollState()
     val infiniteTransition = rememberInfiniteTransition(label = "commandCenterTransition")
     val headerGlow by infiniteTransition.animateFloat(
