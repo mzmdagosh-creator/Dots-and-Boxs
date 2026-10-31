@@ -175,14 +175,66 @@ class ExampleRobolectricTest {
         assertEquals(1, outcome.newState.totalClaimedBoxes)
         assertFalse(outcome.newState.isGameOver)
 
-        // Verify Ranked Match forces mutationsEnabled = false
+        // Verify Ranked Match forces mutationsEnabled = false and MutationMode.STANDARD
         val viewModel = GameViewModel()
-        viewModel.selectMutationsEnabled(true)
+        viewModel.selectMutationMode(MutationMode.CHAOS)
         assertTrue(viewModel.uiState.value.mutationsEnabled)
+        assertEquals(MutationMode.CHAOS, viewModel.uiState.value.selectedMutationMode)
         viewModel.startRankedMatch()
         assertFalse(viewModel.uiState.value.boardState.mutationsEnabled)
+        assertEquals(MutationMode.STANDARD, viewModel.uiState.value.boardState.mutationMode)
         assertTrue(viewModel.uiState.value.boardState.blockedEdges.isEmpty())
         assertTrue(viewModel.uiState.value.boardState.goldenNodes.isEmpty())
+        assertTrue(viewModel.uiState.value.boardState.toxicNodes.isEmpty())
+    }
+
+    @Test
+    fun `mutation modes and toxic traps subtract 1 point and break extra turn combo`() {
+        val mazeBoard = BoardState.create(boxRows = 4, boxCols = 4, mutationMode = MutationMode.MAZE_ONLY)
+        assertTrue(mazeBoard.blockedEdges.isNotEmpty())
+        assertTrue(mazeBoard.goldenNodes.isEmpty())
+        assertTrue(mazeBoard.toxicNodes.isEmpty())
+
+        val goldBoard = BoardState.create(boxRows = 4, boxCols = 4, mutationMode = MutationMode.GOLD_ONLY)
+        assertTrue(goldBoard.blockedEdges.isEmpty())
+        assertTrue(goldBoard.goldenNodes.isNotEmpty())
+        assertTrue(goldBoard.toxicNodes.isEmpty())
+
+        val toxicBoard = BoardState.create(boxRows = 4, boxCols = 4, mutationMode = MutationMode.TOXIC_ONLY)
+        assertTrue(toxicBoard.blockedEdges.isEmpty())
+        assertTrue(toxicBoard.goldenNodes.isEmpty())
+        assertTrue(toxicBoard.toxicNodes.size in 1..3)
+
+        val chaosBoard = BoardState.create(boxRows = 4, boxCols = 4, mutationMode = MutationMode.CHAOS)
+        assertTrue(chaosBoard.blockedEdges.isNotEmpty())
+        assertTrue(chaosBoard.goldenNodes.isNotEmpty())
+        assertTrue(chaosBoard.toxicNodes.isNotEmpty())
+        assertTrue(chaosBoard.goldenNodes.intersect(chaosBoard.toxicNodes).isEmpty())
+
+        // Verify Toxic Node subtracts 1 point (-1) and forces grantedExtraTurn = false
+        var state = BoardState.create(boxRows = 2, boxCols = 2, mutationMode = MutationMode.STANDARD).copy(
+            mutationMode = MutationMode.TOXIC_ONLY,
+            toxicNodes = setOf(BoxCoordinate(0, 0))
+        )
+        state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0))!!.newState
+        state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0))!!.newState
+        state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0))!!.newState
+        // Now it is Player 2's turn; Player 2 completes the toxic node (0,0)
+        val toxicOutcome = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1))!!
+        assertEquals(-1, toxicOutcome.newState.scoreForPlayer(2))
+        assertFalse(toxicOutcome.grantedExtraTurn)
+        // Turn advances to Player 1 because toxic trap broke the extra-turn combo
+        assertEquals(1, toxicOutcome.newState.currentPlayer)
+    }
+
+    @Test
+    fun `trophy room navigation and expanded achievements unlock properly`() {
+        assertEquals(18, AchievementProtocol.entries.size)
+        val viewModel = GameViewModel()
+        viewModel.openAchievementsScreen()
+        assertEquals(ScreenDestination.ACHIEVEMENTS, viewModel.uiState.value.currentScreen)
+        viewModel.closeAchievementsScreen()
+        assertEquals(ScreenDestination.SETUP, viewModel.uiState.value.currentScreen)
     }
 }
 

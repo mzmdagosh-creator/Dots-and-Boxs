@@ -644,17 +644,35 @@ enum class RankedDivision(
     }
 }
 
+enum class MutationMode(val label: String, val subtitle: String) {
+    STANDARD("Standard", "Classic Pure Grid — No Mutations"),
+    MAZE_ONLY("Maze", "Blocked Maze Edges (5–15%)"),
+    GOLD_ONLY("Gold", "Golden Nodes (+2 Points)"),
+    TOXIC_ONLY("Toxic", "Toxic Traps (-1 Pt & Breaks Combo)"),
+    CHAOS("Chaos", "Mixed — Maze, Golden & Toxic Nodes");
+
+    val hasMaze: Boolean get() = this == MAZE_ONLY || this == CHAOS
+    val hasGold: Boolean get() = this == GOLD_ONLY || this == CHAOS
+    val hasToxic: Boolean get() = this == TOXIC_ONLY || this == CHAOS
+}
+
 enum class AchievementProtocol(val id: String, val title: String, val description: String, val isSecret: Boolean = false) {
     INITIATION("ach_initiation", "Initiation", "Win your first Ranked Circuit or Campaign match"),
+    FIRST_BLOOD("ach_first_blood", "First Blood", "Capture the very first node in a match."),
     TURING_TEST("ach_turing_test", "Turing Test Passed", "Defeat the Hard AI (Minimax) in a match"),
     CHAIN_REACTION("ach_chain_reaction", "Chain Reaction", "Capture 4 or more nodes in a single unbroken turn"),
+    COMEBACK_KID("ach_comeback_kid", "Comeback Kid", "Win a match after trailing by 5 or more nodes."),
     GHOST_IN_MACHINE("ach_ghost_machine", "Ghost in the Machine", "Shut out the CPU (Win a match where the AI scores 0)"),
+    GOLD_RUSH("ach_gold_rush", "Gold Rush", "Capture a Golden Node."),
+    MAZE_RUNNER("ach_maze_runner", "Maze Runner", "Win a mutated maze match on Hard difficulty."),
     GRID_MASTER("ach_grid_master", "Grid Master", "Play a total of 50 matches"),
     SYSTEM_FREEZE("ach_system_freeze", "System Freeze", "Win a Blitz match without letting the timer expire", true),
+    PACIFIST("ach_pacifist", "Calculated Pacifist", "Win a match without ever triggering a combo higher than x2.", true),
     SILVER_CIRCUIT("ach_silver_circuit", "Silver Circuit", "Reach Silver Division (100+ RP) in Ranked Circuit"),
     GOLD_STANDARD("ach_gold_standard", "Gold Standard", "Reach Gold Division (200+ RP) in Ranked Circuit"),
     PLATINUM_OVERCLOCK("ach_platinum_overclock", "Platinum Overclock", "Reach Platinum Division (300+ RP) in Ranked Circuit"),
     NEON_APEX("ach_neon_apex", "Neon Apex", "Reach Neon Division (400+ RP) in Ranked Circuit", true),
+    NEON_GOD("ach_neon_god", "Neon God", "Reach 1,000 Rank Points in the Neon League.", true),
     MAX_GRID_CONQUEROR("ach_max_grid", "6×6 Conqueror", "Win a match on the 6×6 Grid"),
     CHAMELEON_PROTOCOL("ach_chameleon", "Chameleon Protocol", "Customize your Neon Theme in System Settings")
 }
@@ -676,9 +694,11 @@ data class BoardState(
     val horizontalEdges: List<List<Int>> = List(boxRows + 1) { List(boxCols) { 0 } },
     val verticalEdges: List<List<Int>> = List(boxRows) { List(boxCols + 1) { 0 } },
     val boxes: List<List<Int>> = List(boxRows) { List(boxCols) { 0 } },
-    val mutationsEnabled: Boolean = false,
+    val mutationMode: MutationMode = MutationMode.STANDARD,
+    val mutationsEnabled: Boolean = mutationMode != MutationMode.STANDARD,
     val blockedEdges: Set<EdgeCoordinate> = emptySet(),
     val goldenNodes: Set<BoxCoordinate> = emptySet(),
+    val toxicNodes: Set<BoxCoordinate> = emptySet(),
     val lastClaimedEdge: EdgeCoordinate? = null,
     val lastCapturedBoxes: Set<BoxCoordinate> = emptySet(),
     val comboChainBoxes: Set<BoxCoordinate> = emptySet(),
@@ -687,7 +707,11 @@ data class BoardState(
     val hasExtraTurnStreak: Boolean = false,
     val totalMovesPlayed: Int = 0,
     val matchStartTimeMs: Long = System.currentTimeMillis(),
-    val longestComboChain: Int = 0
+    val longestComboChain: Int = 0,
+    val firstBoxCapturer: Int? = null,
+    val maxPlayer1Deficit: Int = 0,
+    val maxPlayer1Combo: Int = 0,
+    val player1CapturedGoldenNode: Boolean = false
 ) {
     val dotRows: Int get() = boxRows + 1
     val dotCols: Int get() = boxCols + 1
@@ -727,7 +751,8 @@ data class BoardState(
             cpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
             boxRows: Int = DEFAULT_BOX_ROWS,
             boxCols: Int = DEFAULT_BOX_COLS,
-            mutationsEnabled: Boolean = false
+            mutationMode: MutationMode = MutationMode.STANDARD,
+            mutationsEnabled: Boolean = mutationMode != MutationMode.STANDARD
         ): BoardState {
             val safeRows = boxRows.coerceIn(2, 10)
             val safeCols = boxCols.coerceIn(2, 10)
@@ -744,10 +769,19 @@ data class BoardState(
                 }
             }
 
+            val effectiveMutationMode = if (mutationMode != MutationMode.STANDARD) {
+                mutationMode
+            } else if (mutationsEnabled) {
+                MutationMode.CHAOS
+            } else {
+                MutationMode.STANDARD
+            }
+
             val generatedBlockedEdges = mutableSetOf<EdgeCoordinate>()
             val generatedGoldenNodes = mutableSetOf<BoxCoordinate>()
+            val generatedToxicNodes = mutableSetOf<BoxCoordinate>()
 
-            if (mutationsEnabled) {
+            if (effectiveMutationMode.hasMaze) {
                 val internalEdges = mutableListOf<EdgeCoordinate>()
                 for (r in 1 until safeRows) {
                     for (c in 0 until safeCols) {
@@ -786,15 +820,26 @@ data class BoardState(
                         }
                     }
                 }
+            }
 
-                val allBoxes = mutableListOf<BoxCoordinate>()
-                for (r in 0 until safeRows) {
-                    for (c in 0 until safeCols) {
-                        allBoxes.add(BoxCoordinate(r, c))
-                    }
+            val allBoxes = mutableListOf<BoxCoordinate>()
+            for (r in 0 until safeRows) {
+                for (c in 0 until safeCols) {
+                    allBoxes.add(BoxCoordinate(r, c))
                 }
+            }
+
+            if (effectiveMutationMode.hasGold) {
                 val goldenCount = Random.nextInt(1, 4).coerceAtMost(allBoxes.size)
                 generatedGoldenNodes.addAll(allBoxes.shuffled().take(goldenCount))
+            }
+
+            if (effectiveMutationMode.hasToxic) {
+                val remainingBoxes = allBoxes.filterNot { generatedGoldenNodes.contains(it) }
+                if (remainingBoxes.isNotEmpty()) {
+                    val toxicCount = Random.nextInt(1, 4).coerceAtMost(remainingBoxes.size)
+                    generatedToxicNodes.addAll(remainingBoxes.shuffled().take(toxicCount))
+                }
             }
 
             return BoardState(
@@ -809,9 +854,11 @@ data class BoardState(
                 horizontalEdges = List(safeRows + 1) { List(safeCols) { 0 } },
                 verticalEdges = List(safeRows) { List(safeCols + 1) { 0 } },
                 boxes = List(safeRows) { List(safeCols) { 0 } },
-                mutationsEnabled = mutationsEnabled,
+                mutationMode = effectiveMutationMode,
+                mutationsEnabled = effectiveMutationMode != MutationMode.STANDARD,
                 blockedEdges = generatedBlockedEdges,
                 goldenNodes = generatedGoldenNodes,
+                toxicNodes = generatedToxicNodes,
                 matchStartTimeMs = System.currentTimeMillis(),
                 longestComboChain = 0
             )
@@ -869,15 +916,31 @@ object DotsAndBoxesEngine {
         }
 
         val capturedCount = newlyCaptured.size
-        val pointsEarned = newlyCaptured.sumOf { box -> if (state.goldenNodes.contains(box)) 2 else 1 }
+        val capturedToxic = newlyCaptured.any { state.toxicNodes.contains(it) }
+        val capturedGolden = newlyCaptured.any { state.goldenNodes.contains(it) }
+        val pointsEarned = newlyCaptured.sumOf { box ->
+            when {
+                state.goldenNodes.contains(box) -> 2
+                state.toxicNodes.contains(box) -> -1
+                else -> 1
+            }
+        }
         val updatedScores = state.scores.toMutableMap()
         updatedScores[state.currentPlayer] = (updatedScores[state.currentPlayer] ?: 0) + pointsEarned
-        val grantedExtraTurn = capturedCount > 0
+        val grantedExtraTurn = capturedCount > 0 && !capturedToxic
         val nextPlayer = if (grantedExtraTurn) state.currentPlayer else (state.currentPlayer % state.activePlayerCount) + 1
         val newComboCount = if (grantedExtraTurn) state.currentComboCount + capturedCount else 0
         val newLongestCombo = max(state.longestComboChain, newComboCount)
         val newComboChain = if (grantedExtraTurn) state.comboChainBoxes + newlyCaptured else emptySet()
-        val newComboTriggerId = if (grantedExtraTurn) state.comboTriggerId + 1 else state.comboTriggerId
+        val newComboTriggerId = if (capturedCount > 0) state.comboTriggerId + 1 else state.comboTriggerId
+
+        val newFirstCapturer = state.firstBoxCapturer ?: if (capturedCount > 0) state.currentPlayer else null
+        val p1Score = updatedScores[1] ?: 0
+        val maxOpponentScore = updatedScores.filterKeys { it != 1 }.values.maxOrNull() ?: 0
+        val currentP1Deficit = (maxOpponentScore - p1Score).coerceAtLeast(0)
+        val newMaxP1Deficit = max(state.maxPlayer1Deficit, currentP1Deficit)
+        val newMaxP1Combo = if (state.currentPlayer == 1) max(state.maxPlayer1Combo, newComboCount) else state.maxPlayer1Combo
+        val newP1CapturedGolden = state.player1CapturedGoldenNode || (state.currentPlayer == 1 && capturedGolden)
 
         val updatedState = state.copy(
             currentPlayer = nextPlayer,
@@ -892,7 +955,11 @@ object DotsAndBoxesEngine {
             comboTriggerId = newComboTriggerId,
             hasExtraTurnStreak = grantedExtraTurn,
             totalMovesPlayed = state.totalMovesPlayed + 1,
-            longestComboChain = newLongestCombo
+            longestComboChain = newLongestCombo,
+            firstBoxCapturer = newFirstCapturer,
+            maxPlayer1Deficit = newMaxP1Deficit,
+            maxPlayer1Combo = newMaxP1Combo,
+            player1CapturedGoldenNode = newP1CapturedGolden
         )
         return MoveOutcome(newState = updatedState, capturedBoxes = newlyCaptured, grantedExtraTurn = grantedExtraTurn)
     }
@@ -914,31 +981,46 @@ object DotsAndBoxesEngine {
         val goldenCaptures = mutableListOf<EdgeCoordinate>()
         val doubleCaptures = mutableListOf<EdgeCoordinate>()
         val singleCaptures = mutableListOf<EdgeCoordinate>()
+        val toxicTrapSetups = mutableListOf<EdgeCoordinate>()
         val safeMoves = mutableListOf<EdgeCoordinate>()
         val riskyMoves = mutableListOf<EdgeCoordinate>()
         val goldenRiskyMoves = mutableListOf<EdgeCoordinate>()
+        val toxicCaptures = mutableListOf<EdgeCoordinate>()
 
         for (edge in availableEdges) {
             val adj = getAdjacentBoxes(edge, state.boxRows, state.boxCols)
             var completable = 0
             var goldenCompletable = 0
+            var toxicCompletable = 0
             var thirdSidesCreated = 0
             var goldenThirdCreated = 0
+            var toxicThirdCreated = 0
             for (box in adj) {
                 val sides = countClaimedSides(box.row, box.col, state.horizontalEdges, state.verticalEdges, state.blockedEdges)
                 val isGolden = state.goldenNodes.contains(box)
+                val isToxic = state.toxicNodes.contains(box)
                 if (sides == 3) {
-                    completable++
-                    if (isGolden) goldenCompletable++
+                    if (isToxic) {
+                        toxicCompletable++
+                    } else {
+                        completable++
+                        if (isGolden) goldenCompletable++
+                    }
                 } else if (sides == 2) {
-                    thirdSidesCreated++
-                    if (isGolden) goldenThirdCreated++
+                    if (isToxic) {
+                        toxicThirdCreated++
+                    } else {
+                        thirdSidesCreated++
+                        if (isGolden) goldenThirdCreated++
+                    }
                 }
             }
             when {
+                toxicCompletable > 0 && goldenCompletable == 0 -> toxicCaptures.add(edge)
                 goldenCompletable > 0 -> goldenCaptures.add(edge)
                 completable >= 2 -> doubleCaptures.add(edge)
                 completable == 1 -> singleCaptures.add(edge)
+                toxicThirdCreated > 0 && thirdSidesCreated == 0 -> toxicTrapSetups.add(edge)
                 thirdSidesCreated == 0 -> safeMoves.add(edge)
                 goldenThirdCreated == 0 -> riskyMoves.add(edge)
                 else -> goldenRiskyMoves.add(edge)
@@ -947,9 +1029,11 @@ object DotsAndBoxesEngine {
         if (goldenCaptures.isNotEmpty()) return goldenCaptures.random()
         if (doubleCaptures.isNotEmpty()) return doubleCaptures.random()
         if (singleCaptures.isNotEmpty()) return singleCaptures.random()
+        if (toxicTrapSetups.isNotEmpty()) return toxicTrapSetups.random()
         if (safeMoves.isNotEmpty()) return safeMoves.random()
         if (riskyMoves.isNotEmpty()) return riskyMoves.random()
-        return goldenRiskyMoves.random()
+        if (goldenRiskyMoves.isNotEmpty()) return goldenRiskyMoves.random()
+        return toxicCaptures.ifEmpty { availableEdges }.random()
     }
 
     private fun chooseHardMinimaxMove(state: BoardState, availableEdges: List<EdgeCoordinate>): EdgeCoordinate {
@@ -1022,12 +1106,18 @@ object DotsAndBoxesEngine {
             for (r in 0 until state.boxRows) {
                 for (c in 0 until state.boxCols) {
                     if (state.boxes[r][c] == 0 && countClaimedSides(r, c, state.horizontalEdges, state.verticalEdges, state.blockedEdges) == 3) {
-                        val isGolden = state.goldenNodes.contains(BoxCoordinate(r, c))
-                        threeSidedWeight += if (isGolden) 85 else 35
+                        val boxCoord = BoxCoordinate(r, c)
+                        val isGolden = state.goldenNodes.contains(boxCoord)
+                        val isToxic = state.toxicNodes.contains(boxCoord)
+                        threeSidedWeight += when {
+                            isGolden -> 85
+                            isToxic -> -80
+                            else -> 35
+                        }
                     }
                 }
             }
-            if (threeSidedWeight > 0) {
+            if (threeSidedWeight != 0) {
                 if (state.currentPlayer == cpuPlayer) scoreDiff += threeSidedWeight
                 else scoreDiff -= threeSidedWeight
             }
@@ -1042,17 +1132,28 @@ object DotsAndBoxesEngine {
         val adj = getAdjacentBoxes(edge, state.boxRows, state.boxCols)
         var completable = 0
         var goldenCompletable = 0
+        var toxicCompletable = 0
         var createsThird = 0
         var goldenCreatesThird = 0
+        var toxicCreatesThird = 0
         for (box in adj) {
             val sides = countClaimedSides(box.row, box.col, state.horizontalEdges, state.verticalEdges, state.blockedEdges)
             val isGolden = state.goldenNodes.contains(box)
+            val isToxic = state.toxicNodes.contains(box)
             if (sides == 3) {
-                completable++
-                if (isGolden) goldenCompletable++
+                if (isToxic) {
+                    toxicCompletable++
+                } else {
+                    completable++
+                    if (isGolden) goldenCompletable++
+                }
             } else if (sides == 2) {
-                createsThird++
-                if (isGolden) goldenCreatesThird++
+                if (isToxic) {
+                    toxicCreatesThird++
+                } else {
+                    createsThird++
+                    if (isGolden) goldenCreatesThird++
+                }
             }
         }
         val basePriority = when {
@@ -1062,7 +1163,7 @@ object DotsAndBoxesEngine {
             createsThird == 1 -> -10
             else -> -20
         }
-        return basePriority + (goldenCompletable * 60) - (goldenCreatesThird * 55)
+        return basePriority + (goldenCompletable * 60) - (goldenCreatesThird * 55) - (toxicCompletable * 110) + (toxicCreatesThird * 35)
     }
 
     private fun getAllAvailableEdges(
@@ -1127,7 +1228,7 @@ object DotsAndBoxesEngine {
     ): Boolean = countClaimedSides(boxRow, boxCol, hEdges, vEdges, blockedEdges) == 4
 }
 
-enum class ScreenDestination { SETUP, QUICK_CONFIG, GAME, CREDITS, SETTINGS }
+enum class ScreenDestination { SETUP, QUICK_CONFIG, GAME, CREDITS, SETTINGS, ACHIEVEMENTS }
 enum class MainMenuSection { CAMPAIGN, QUICK_MATCH }
 enum class HapticEventType { LINE_TICK, BOX_CAPTURE_BUZZ, VICTORY_CELEBRATION }
 
@@ -1155,6 +1256,7 @@ data class GameUiState(
     val activeCampaignLevel: CampaignLevel? = null,
     val justUnlockedNextCampaignLevel: Boolean = false,
     val selectedGridSize: GridSize = GridSize.SIZE_4X4,
+    val selectedMutationMode: MutationMode = MutationMode.STANDARD,
     val mutationsEnabled: Boolean = false,
     val selectedGameMode: GameMode = GameMode.CPU,
     val selectedCpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
@@ -1352,38 +1454,64 @@ class GameViewModel : ViewModel() {
             unlockAchievement(AchievementProtocol.INITIATION)
         }
 
-        // 2. Turing Test: Defeat Hard AI
+        // 2. First Blood: Capture the very first node in a match
+        if (boardState.firstBoxCapturer == 1) {
+            unlockAchievement(AchievementProtocol.FIRST_BLOOD)
+        }
+
+        // 3. Turing Test: Defeat Hard AI
         if (boardState.cpuDifficulty == CpuDifficulty.HARD && winner == 1) {
             unlockAchievement(AchievementProtocol.TURING_TEST)
         }
 
-        // 3. Chain Reaction: Captured 4+ boxes in a single unbroken turn
+        // 4. Chain Reaction: Captured 4+ boxes in a single unbroken turn
         if (boardState.longestComboChain >= 4 || boardState.currentComboCount >= 4 || boardState.lastCapturedBoxes.size >= 4) {
             unlockAchievement(AchievementProtocol.CHAIN_REACTION)
         }
 
-        // 4. Ghost in the Machine: Shut out the CPU (CPU score = 0)
-        if (winner == 1 && cpuScore == 0) {
+        // 5. Comeback Kid: Win a match after trailing by 5 or more nodes
+        if (winner == 1 && boardState.maxPlayer1Deficit >= 5) {
+            unlockAchievement(AchievementProtocol.COMEBACK_KID)
+        }
+
+        // 6. Ghost in the Machine: Shut out the CPU (CPU score <= 0)
+        if (winner == 1 && cpuScore <= 0) {
             unlockAchievement(AchievementProtocol.GHOST_IN_MACHINE)
         }
 
-        // 5. Grid Master: Play 50 total matches
-        if (_uiState.value.totalMatchesCompleted + 1 >= 50) {
+        // 7. Gold Rush: Capture a Golden Node
+        if (boardState.player1CapturedGoldenNode) {
+            unlockAchievement(AchievementProtocol.GOLD_RUSH)
+        }
+
+        // 8. Maze Runner: Win a mutated maze match on Hard difficulty
+        if (winner == 1 && boardState.cpuDifficulty == CpuDifficulty.HARD && (boardState.mutationMode.hasMaze || boardState.blockedEdges.isNotEmpty())) {
+            unlockAchievement(AchievementProtocol.MAZE_RUNNER)
+        }
+
+        // 9. Grid Master: Play 50 total matches
+        if (_uiState.value.totalMatchesCompleted >= 50) {
             unlockAchievement(AchievementProtocol.GRID_MASTER)
         }
 
-        // 6. System Freeze: Win a Blitz match without timer expiry
+        // 10. System Freeze: Win a Blitz match without timer expiry
         if (_uiState.value.selectedTimerMode == TimerMode.BLITZ && winner == 1 && !_uiState.value.lastTurnForfeitedByTimeout) {
             unlockAchievement(AchievementProtocol.SYSTEM_FREEZE)
         }
 
-        // 7-10. Ranked Circuit Division Achievements
+        // 11. Calculated Pacifist: Win a match without ever triggering a combo higher than x2
+        if (winner == 1 && boardState.maxPlayer1Combo <= 2) {
+            unlockAchievement(AchievementProtocol.PACIFIST)
+        }
+
+        // 12-16. Ranked Circuit Division Achievements
         if (updatedRankPoints >= 100) unlockAchievement(AchievementProtocol.SILVER_CIRCUIT)
         if (updatedRankPoints >= 200) unlockAchievement(AchievementProtocol.GOLD_STANDARD)
         if (updatedRankPoints >= 300) unlockAchievement(AchievementProtocol.PLATINUM_OVERCLOCK)
         if (updatedRankPoints >= 400) unlockAchievement(AchievementProtocol.NEON_APEX)
+        if (updatedRankPoints >= 1000) unlockAchievement(AchievementProtocol.NEON_GOD)
 
-        // 11. 6x6 Conqueror
+        // 17. 6x6 Conqueror
         if (winner == 1 && boardState.boxRows == 6 && boardState.boxCols == 6) {
             unlockAchievement(AchievementProtocol.MAX_GRID_CONQUEROR)
         }
@@ -1424,6 +1552,18 @@ class GameViewModel : ViewModel() {
     }
 
     fun closeSettingsScreen() {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update { it.copy(currentScreen = ScreenDestination.SETUP) }
+    }
+
+    fun openAchievementsScreen() {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update { it.copy(currentScreen = ScreenDestination.ACHIEVEMENTS) }
+    }
+
+    fun closeAchievementsScreen() {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
         _uiState.update { it.copy(currentScreen = ScreenDestination.SETUP) }
@@ -1574,17 +1714,27 @@ class GameViewModel : ViewModel() {
                     cpuDifficulty = state.selectedCpuDifficulty,
                     boxRows = gridSize.boxRows,
                     boxCols = gridSize.boxCols,
-                    mutationsEnabled = state.mutationsEnabled
+                    mutationMode = state.selectedMutationMode
                 )
             )
         }
         restartBlitzTimerIfNeeded()
     }
 
-    fun selectMutationsEnabled(enabled: Boolean) {
+    fun selectMutationMode(mode: MutationMode) {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
-        _uiState.update { state -> state.copy(mutationsEnabled = enabled, setupErrorResId = null) }
+        _uiState.update { state ->
+            state.copy(
+                selectedMutationMode = mode,
+                mutationsEnabled = mode != MutationMode.STANDARD,
+                setupErrorResId = null
+            )
+        }
+    }
+
+    fun selectMutationsEnabled(enabled: Boolean) {
+        selectMutationMode(if (enabled) MutationMode.CHAOS else MutationMode.STANDARD)
     }
 
     fun selectGameMode(mode: GameMode) {
@@ -1622,7 +1772,7 @@ class GameViewModel : ViewModel() {
             cpuDifficulty = division.difficulty,
             boxRows = division.gridSize.boxRows,
             boxCols = division.gridSize.boxCols,
-            mutationsEnabled = false
+            mutationMode = MutationMode.STANDARD
         )
         _uiState.update {
             it.copy(
@@ -1662,7 +1812,7 @@ class GameViewModel : ViewModel() {
             cpuDifficulty = level.difficulty,
             boxRows = level.gridSize.boxRows,
             boxCols = level.gridSize.boxCols,
-            mutationsEnabled = false
+            mutationMode = MutationMode.STANDARD
         )
         _uiState.update {
             it.copy(
@@ -1711,7 +1861,7 @@ class GameViewModel : ViewModel() {
             cpuDifficulty = state.selectedCpuDifficulty,
             boxRows = state.selectedGridSize.boxRows,
             boxCols = state.selectedGridSize.boxCols,
-            mutationsEnabled = state.mutationsEnabled
+            mutationMode = state.selectedMutationMode
         )
 
         _uiState.update {
@@ -1760,6 +1910,12 @@ class GameViewModel : ViewModel() {
             emitHaptic(HapticEventType.BOX_CAPTURE_BUZZ, capturedCount)
             if (newBoard.currentComboCount >= 4 || outcome.capturedBoxes.size >= 4) {
                 unlockAchievement(AchievementProtocol.CHAIN_REACTION)
+            }
+            if (wasHumanMove && newBoard.firstBoxCapturer == 1) {
+                unlockAchievement(AchievementProtocol.FIRST_BLOOD)
+            }
+            if (wasHumanMove && newBoard.player1CapturedGoldenNode) {
+                unlockAchievement(AchievementProtocol.GOLD_RUSH)
             }
         } else {
             emitHaptic(HapticEventType.LINE_TICK)
@@ -1979,7 +2135,7 @@ class GameViewModel : ViewModel() {
                     cpuDifficulty = state.selectedCpuDifficulty,
                     boxRows = state.selectedGridSize.boxRows,
                     boxCols = state.selectedGridSize.boxCols,
-                    mutationsEnabled = currentBoard.mutationsEnabled
+                    mutationMode = currentBoard.mutationMode
                 )
             )
         }
@@ -2052,6 +2208,7 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             matchHistory = uiState.matchHistory,
                             onStartRankedMatch = viewModel::startRankedMatch,
                             onOpenQuickMatch = viewModel::openQuickMatchConfig,
+                            onOpenAchievements = viewModel::openAchievementsScreen,
                             onOpenSettings = viewModel::openSettingsScreen
                         )
                     }
@@ -2061,6 +2218,8 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             selectedPlayerCount = uiState.selectedPlayerCount,
                             onSelectPlayerCount = viewModel::selectPlayerCount,
                             selectedGridSize = uiState.selectedGridSize,
+                            selectedMutationMode = uiState.selectedMutationMode,
+                            onSelectMutationMode = viewModel::selectMutationMode,
                             mutationsEnabled = uiState.mutationsEnabled,
                             onSelectMutationsEnabled = viewModel::selectMutationsEnabled,
                             selectedCpuDifficulty = uiState.selectedCpuDifficulty,
@@ -2131,6 +2290,13 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             onBackToCommandCenter = viewModel::closeSettingsScreen
                         )
                     }
+                    ScreenDestination.ACHIEVEMENTS -> {
+                        AchievementsScreen(
+                            unlockedIds = uiState.unlockedAchievements,
+                            performanceMode = uiState.performanceMode,
+                            onBackToCommandCenter = viewModel::closeAchievementsScreen
+                        )
+                    }
                 }
             }
         }
@@ -2148,6 +2314,7 @@ fun CommandCenterScreen(
     matchHistory: List<MatchHistoryItem> = emptyList(),
     onStartRankedMatch: () -> Unit = {},
     onOpenQuickMatch: () -> Unit = {},
+    onOpenAchievements: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -2216,6 +2383,7 @@ fun CommandCenterScreen(
         ) {
             CommandCenterHeader(
                 glowAlpha = headerGlow,
+                onOpenAchievements = onOpenAchievements,
                 onOpenSettings = onOpenSettings
             )
 
@@ -2250,11 +2418,9 @@ fun CommandCenterScreen(
                         Text(text = "Quick Match", style = MaterialTheme.typography.titleSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, fontSize = 14.sp), textAlign = TextAlign.Center)
                     }
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(text = "Custom Grid • Difficulty • Multiplayer • Timers", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontSize = 10.sp), color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+                    Text(text = "Custom Grid • Mutations • Difficulty • Timers", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontSize = 10.sp), color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
                 }
             }
-
-            DashboardAchievementsCard(unlockedIds = unlockedAchievements)
 
             DashboardSessionHistoryCard(
                 sessionStats = sessionStats,
@@ -2267,6 +2433,7 @@ fun CommandCenterScreen(
 @Composable
 private fun CommandCenterHeader(
     glowAlpha: Float,
+    onOpenAchievements: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -2283,10 +2450,28 @@ private fun CommandCenterHeader(
             )
             .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
+        IconButton(
+            onClick = onOpenAchievements,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(ProtocolElevatedSurface)
+                .border(1.dp, ProtocolAmber.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
+                .testTag("open_achievements_button")
+        ) {
+            Icon(
+                imageVector = Icons.Filled.EmojiEvents,
+                contentDescription = "Trophy Room",
+                tint = ProtocolAmber,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 44.dp),
+                .padding(horizontal = 52.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -2295,7 +2480,7 @@ private fun CommandCenterHeader(
                 style = MaterialTheme.typography.displayLarge.copy(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Black,
-                    fontSize = 25.sp,
+                    fontSize = 24.sp,
                     letterSpacing = 2.0.sp,
                     shadow = Shadow(color = palette.p1Accent.copy(alpha = glowAlpha), offset = Offset.Zero, blurRadius = 28f)
                 ),
@@ -2547,50 +2732,195 @@ fun RankedCircuitCard(
 }
 
 @Composable
-fun DashboardAchievementsCard(unlockedIds: Set<String>, modifier: Modifier = Modifier) {
+fun AchievementsScreen(
+    unlockedIds: Set<String>,
+    performanceMode: Boolean = false,
+    onBackToCommandCenter: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val palette = LocalGamePalette.current
-    Card(
-        modifier = modifier.fillMaxWidth().border(1.dp, ProtocolBorder, RoundedCornerShape(18.dp)).testTag("dashboard_achievements_card"),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
+    val totalCount = AchievementProtocol.entries.size
+    val unlockedCount = unlockedIds.size
+    val completionFraction = if (totalCount > 0) (unlockedCount.toFloat() / totalCount).coerceIn(0f, 1f) else 0f
+
+    BackHandler { onBackToCommandCenter() }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(ObsidianBackground)
+            .testTag("achievements_screen"),
+        contentAlignment = Alignment.TopCenter
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (!performanceMode) {
+            DriftingNeonDotsBackground()
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .widthIn(max = 580.dp)
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(imageVector = Icons.Filled.AutoAwesome, contentDescription = null, tint = palette.p1Accent, modifier = Modifier.size(16.dp))
-                    Text(text = "TROPHY ROOM (12 ACHIEVEMENTS)", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = palette.p1Accent)
+                OutlinedButton(
+                    onClick = onBackToCommandCenter,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolTextPrimary),
+                    modifier = Modifier.height(48.dp).testTag("achievements_back_button")
+                ) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Command Center", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Command Center", style = MaterialTheme.typography.labelLarge)
                 }
                 Text(
-                    text = "${unlockedIds.size} / ${AchievementProtocol.entries.size}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold),
-                    color = ProtocolAmber
+                    text = "TROPHY ROOM",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Black,
+                        color = ProtocolAmber
+                    )
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                AchievementProtocol.entries.forEach { ach ->
-                    val isUnlocked = unlockedIds.contains(ach.id)
-                    val accent = if (isUnlocked) palette.p1Accent else ProtocolTextMuted
-                    val bgColor = if (isUnlocked) palette.p1Accent.copy(alpha = 0.1f) else ProtocolElevatedSurface
-
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, ProtocolAmber.copy(alpha = 0.8f), RoundedCornerShape(20.dp))
+                    .testTag("achievements_summary_card"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.EmojiEvents,
+                                contentDescription = null,
+                                tint = ProtocolAmber,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "PROTOCOL TROPHIES UNLOCKED",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = palette.p1Accent
+                                )
+                                Text(
+                                    text = "$unlockedCount / $totalCount Trophies (${(completionFraction * 100).roundToInt()}%)",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = ProtocolTextPrimary,
+                                    modifier = Modifier.testTag("achievements_unlocked_count_text")
+                                )
+                            }
+                        }
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { completionFraction },
+                        color = ProtocolAmber,
+                        trackColor = ProtocolElevatedSurface,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(bgColor)
-                            .border(1.dp, if (isUnlocked) palette.p1Accent.copy(alpha = 0.5f) else ProtocolBorder, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .testTag("achievements_progress_bar")
+                    )
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .testTag("achievements_lazy_column"),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(items = AchievementProtocol.entries, key = { it.id }) { ach ->
+                    val isUnlocked = unlockedIds.contains(ach.id)
+                    val accent = if (isUnlocked) palette.p1Accent else ProtocolTextMuted
+                    val bgColor = if (isUnlocked) palette.p1Accent.copy(alpha = 0.12f) else ProtocolCardSurface
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                width = if (isUnlocked) 1.5.dp else 1.dp,
+                                color = if (isUnlocked) palette.p1Accent.copy(alpha = 0.75f) else ProtocolBorder,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .testTag("achievement_item_${ach.id}"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = bgColor)
                     ) {
-                        Icon(imageVector = if (isUnlocked) Icons.Filled.EmojiEvents else Icons.Filled.Lock, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
-                        Column {
-                            Text(text = if (!isUnlocked && ach.isSecret) "???" else ach.title, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFamily = JetBrainsMonoFontFamily), color = if (isUnlocked) ProtocolTextPrimary else ProtocolTextMuted)
-                            Text(text = if (!isUnlocked && ach.isSecret) "Secret Achievement" else ach.description, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = ProtocolTextMuted)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isUnlocked) palette.p1Accent.copy(alpha = 0.2f) else ProtocolElevatedSurface)
+                                    .border(1.5.dp, if (isUnlocked) palette.p1Accent else ProtocolBorder, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isUnlocked) Icons.Filled.EmojiEvents else Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = if (isUnlocked) ProtocolAmber else accent,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = if (!isUnlocked && ach.isSecret) "???" else ach.title,
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = JetBrainsMonoFontFamily
+                                    ),
+                                    color = if (isUnlocked) ProtocolTextPrimary else ProtocolTextMuted
+                                )
+                                Text(
+                                    text = if (!isUnlocked && ach.isSecret) "Secret Protocol — Unlock condition hidden" else ach.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isUnlocked) palette.p1Accent else ProtocolTextMuted
+                                )
+                            }
+                            if (isUnlocked) {
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = "Unlocked",
+                                    tint = ProtocolLime,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -2604,7 +2934,9 @@ fun QuickMatchConfigScreen(
     performanceMode: Boolean = false,
     selectedPlayerCount: Int, onSelectPlayerCount: (Int) -> Unit,
     selectedGridSize: GridSize,
-    mutationsEnabled: Boolean = false,
+    selectedMutationMode: MutationMode = MutationMode.STANDARD,
+    onSelectMutationMode: (MutationMode) -> Unit = {},
+    mutationsEnabled: Boolean = selectedMutationMode != MutationMode.STANDARD,
     onSelectMutationsEnabled: (Boolean) -> Unit = {},
     selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
     onSelectGridSize: (GridSize) -> Unit, onSelectCpuDifficulty: (CpuDifficulty) -> Unit, onSelectTimerMode: (TimerMode) -> Unit,
@@ -2612,6 +2944,7 @@ fun QuickMatchConfigScreen(
 ) {
     val scrollState = rememberScrollState()
     var gridDropdownExpanded by remember { mutableStateOf(false) }
+    var mutationDropdownExpanded by remember { mutableStateOf(false) }
     var diffDropdownExpanded by remember { mutableStateOf(false) }
     var timerDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -2648,7 +2981,7 @@ fun QuickMatchConfigScreen(
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(text = "PROTOCOL PARAMETERS", style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black), color = ProtocolTextPrimary)
-                        Text(text = "Select Player Mode, Grid Size, Grid Mutations, CPU Difficulty, and Time Limit.", style = MaterialTheme.typography.bodyMedium, color = ProtocolTextMuted)
+                        Text(text = "Select Player Mode, Grid Size, Grid Mutations Sandbox, CPU Difficulty, and Time Limit.", style = MaterialTheme.typography.bodyMedium, color = ProtocolTextMuted)
                     }
                     
                     // 0. PLAYERS SECTION
@@ -2722,48 +3055,77 @@ fun QuickMatchConfigScreen(
                         }
                     }
 
-                    // 1.5 GRID MUTATIONS TOGGLE (Standard vs Mutated)
+                    // 1.5 GRID MUTATIONS SANDBOX (Dropdown + 5 Selectable Chips)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val mutationAccent = when (selectedMutationMode) {
+                            MutationMode.STANDARD -> ProtocolCyan
+                            MutationMode.MAZE_ONLY -> Color(0xFFEF4444)
+                            MutationMode.GOLD_ONLY -> ThemeColor.SOLAR_FLARE.primary
+                            MutationMode.TOXIC_ONLY -> ProtocolLime
+                            MutationMode.CHAOS -> ProtocolMagenta
+                        }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "GRID MUTATIONS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = ThemeColor.SOLAR_FLARE.primary)
-                            Text(
-                                text = if (mutationsEnabled) "Blocked Maze Edges + Golden Nodes (+2)" else "Classic Pure Grid",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = ProtocolTextMuted
-                            )
+                            Column {
+                                Text(text = "GRID MUTATIONS SANDBOX", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = mutationAccent)
+                                Text(text = selectedMutationMode.subtitle, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = ProtocolTextMuted)
+                            }
+                            Box {
+                                OutlinedButton(
+                                    onClick = { mutationDropdownExpanded = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = mutationAccent),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(36.dp).testTag("mutation_mode_dropdown_button")
+                                ) {
+                                    Text(text = selectedMutationMode.label, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                                    Icon(imageVector = Icons.Filled.ArrowDropDown, contentDescription = "Select Mutation Mode")
+                                }
+                                DropdownMenu(expanded = mutationDropdownExpanded, onDismissRequest = { mutationDropdownExpanded = false }, modifier = Modifier.background(ProtocolElevatedSurface)) {
+                                    MutationMode.entries.forEach { modeOption ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(text = modeOption.label, color = ProtocolTextPrimary, fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold)
+                                                    Text(text = modeOption.subtitle, color = ProtocolTextMuted, style = MaterialTheme.typography.labelSmall)
+                                                }
+                                            },
+                                            onClick = {
+                                                onSelectMutationMode(modeOption)
+                                                mutationDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val options = listOf(false to "Standard", true to "Mutated")
-                            options.forEach { (isMutatedOption, label) ->
-                                val isSelected = mutationsEnabled == isMutatedOption
-                                val optionAccent = if (isMutatedOption) ThemeColor.SOLAR_FLARE.primary else ProtocolCyan
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            MutationMode.entries.forEach { modeOption ->
+                                val isSelected = selectedMutationMode == modeOption
+                                val chipAccent = when (modeOption) {
+                                    MutationMode.STANDARD -> ProtocolCyan
+                                    MutationMode.MAZE_ONLY -> Color(0xFFEF4444)
+                                    MutationMode.GOLD_ONLY -> ThemeColor.SOLAR_FLARE.primary
+                                    MutationMode.TOXIC_ONLY -> ProtocolLime
+                                    MutationMode.CHAOS -> ProtocolMagenta
+                                }
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(48.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isSelected) optionAccent else ProtocolElevatedSurface)
-                                        .border(width = if (isSelected) 2.dp else 1.dp, color = if (isSelected) optionAccent else ProtocolBorder, shape = RoundedCornerShape(12.dp))
-                                        .clickable { onSelectMutationsEnabled(isMutatedOption) }
-                                        .testTag("mutations_${label.lowercase(Locale.US)}_button"),
+                                        .background(if (isSelected) chipAccent else ProtocolElevatedSurface)
+                                        .border(width = if (isSelected) 2.dp else 1.dp, color = if (isSelected) chipAccent else ProtocolBorder, shape = RoundedCornerShape(12.dp))
+                                        .clickable { onSelectMutationMode(modeOption) }
+                                        .testTag("mutation_mode_${modeOption.name.lowercase(Locale.US)}_button"),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (isMutatedOption) {
-                                            Icon(
-                                                imageVector = Icons.Filled.AutoAwesome,
-                                                contentDescription = null,
-                                                tint = if (isSelected) Color.Black else ThemeColor.SOLAR_FLARE.primary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        Text(
-                                            text = label,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = if (isSelected) Color.Black else ProtocolTextPrimary
-                                        )
-                                    }
+                                    Text(
+                                        text = modeOption.label,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Bold),
+                                        color = if (isSelected) Color.Black else ProtocolTextPrimary,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
                         }
@@ -4125,10 +4487,12 @@ private fun DotsAndBoxesGrid(
                             val boxOwner = boardState.boxes[dotRow][dotCol]
                             val boxCoord = BoxCoordinate(dotRow, dotCol)
                             val isGoldenNode = boardState.goldenNodes.contains(boxCoord)
+                            val isToxicNode = boardState.toxicNodes.contains(boxCoord)
                             val isNewlyCaptured = boardState.lastCapturedBoxes.contains(boxCoord)
                             val isInComboChain = boardState.isMultiSquareCombo && boardState.comboChainBoxes.contains(boxCoord)
                             PlayableBoxCell(
-                                row = dotRow, col = dotCol, owner = boxOwner, isGoldenNode = isGoldenNode,
+                                row = dotRow, col = dotCol, owner = boxOwner,
+                                isGoldenNode = isGoldenNode, isToxicNode = isToxicNode,
                                 neonGlowPulse = neonGlowPulse, isNewlyCaptured = isNewlyCaptured,
                                 isInComboChain = isInComboChain, comboPulseFraction = if (isNewlyCaptured || isInComboChain) comboPulseFraction else 0f,
                                 performanceMode = performanceMode, size = boxSize
@@ -4271,24 +4635,31 @@ private fun VerticalEdgeCell(
 
 @Composable
 private fun PlayableBoxCell(
-    row: Int, col: Int, owner: Int, isGoldenNode: Boolean = false, neonGlowPulse: Float = 0.8f,
+    row: Int, col: Int, owner: Int,
+    isGoldenNode: Boolean = false, isToxicNode: Boolean = false,
+    neonGlowPulse: Float = 0.8f,
     isNewlyCaptured: Boolean, isInComboChain: Boolean, comboPulseFraction: Float,
     performanceMode: Boolean = false, size: Dp
 ) {
     val palette = LocalGamePalette.current
     val solarFlareGold = ThemeColor.SOLAR_FLARE.primary
+    val toxicRed = Color(0xFFEF4444)
+    val toxicGreen = Color(0xFF00E676)
+    val toxicPulseColor = if (neonGlowPulse >= 0.78f) toxicRed else toxicGreen
     val accentColor = if (owner != 0) playerAccentColor(owner) else Color.Transparent
     val targetFillColor = when {
         owner != 0 && isGoldenNode -> solarFlareGold.copy(alpha = 0.28f)
+        owner != 0 && isToxicNode -> toxicRed.copy(alpha = 0.30f)
         owner != 0 -> accentColor.copy(alpha = 0.40f)
         isGoldenNode -> solarFlareGold.copy(alpha = (0.08f + 0.12f * neonGlowPulse).coerceIn(0f, 1f))
+        isToxicNode -> toxicPulseColor.copy(alpha = (0.08f + 0.14f * neonGlowPulse).coerceIn(0f, 1f))
         else -> Color.Transparent
     }
     val boxFillColor by animateColorAsState(targetValue = targetFillColor, animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing), label = "boxFillColorAnim")
 
     val singleCapturePulse = remember { Animatable(1f) }
     val charJumpScale = remember { Animatable(0.2f) }
-    val goldenFloatOffset = remember { Animatable(0f) }
+    val floatingDeltaOffset = remember { Animatable(0f) }
     LaunchedEffect(owner) {
         if (owner != 0) {
             launch {
@@ -4297,9 +4668,9 @@ private fun PlayableBoxCell(
                 singleCapturePulse.animateTo(targetValue = 1.0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
             }
             launch {
-                goldenFloatOffset.snapTo(12f)
-                goldenFloatOffset.animateTo(targetValue = -4f, animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing))
-                goldenFloatOffset.animateTo(targetValue = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+                floatingDeltaOffset.snapTo(12f)
+                floatingDeltaOffset.animateTo(targetValue = -4f, animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing))
+                floatingDeltaOffset.animateTo(targetValue = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
             }
             charJumpScale.snapTo(0.25f)
             charJumpScale.animateTo(targetValue = 1.75f, animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing))
@@ -4307,7 +4678,7 @@ private fun PlayableBoxCell(
         } else {
             singleCapturePulse.snapTo(1f)
             charJumpScale.snapTo(0.2f)
-            goldenFloatOffset.snapTo(0f)
+            floatingDeltaOffset.snapTo(0f)
         }
     }
 
@@ -4327,14 +4698,29 @@ private fun PlayableBoxCell(
                         color = solarFlareGold.copy(alpha = (0.45f + 0.55f * neonGlowPulse).coerceIn(0f, 1f)),
                         shape = RoundedCornerShape(6.dp)
                     )
+                    isToxicNode && owner == 0 -> Modifier.border(
+                        width = 1.5.dp,
+                        color = toxicPulseColor.copy(alpha = (0.45f + 0.55f * neonGlowPulse).coerceIn(0f, 1f)),
+                        shape = RoundedCornerShape(6.dp)
+                    )
                     (isNewlyCaptured || isInComboChain) && owner != 0 -> Modifier.border(
                         width = if (isInComboChain) 2.dp else 1.5.dp,
-                        color = if (isGoldenNode) solarFlareGold else if (comboPulseFraction > 0.2f) palette.primaryText else accentColor,
+                        color = when {
+                            isGoldenNode -> solarFlareGold
+                            isToxicNode -> toxicRed
+                            comboPulseFraction > 0.2f -> palette.primaryText
+                            else -> accentColor
+                        },
                         shape = RoundedCornerShape(6.dp)
                     )
                     isGoldenNode && owner != 0 -> Modifier.border(
                         width = 1.5.dp,
                         color = solarFlareGold.copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    isToxicNode && owner != 0 -> Modifier.border(
+                        width = 1.5.dp,
+                        color = toxicRed.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(6.dp)
                     )
                     else -> Modifier
@@ -4346,7 +4732,11 @@ private fun PlayableBoxCell(
         if (!performanceMode) {
             if (isNewlyCaptured && comboPulseFraction > 0.02f && owner != 0) {
                 val particleProgress = 1f - comboPulseFraction
-                val particleColor = if (isGoldenNode) solarFlareGold else accentColor
+                val particleColor = when {
+                    isGoldenNode -> solarFlareGold
+                    isToxicNode -> toxicRed
+                    else -> accentColor
+                }
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val center = Offset(this.size.width / 2f, this.size.height / 2f)
                     val maxRadius = this.size.maxDimension * 0.85f
@@ -4373,37 +4763,70 @@ private fun PlayableBoxCell(
                 ),
                 color = solarFlareGold.copy(alpha = (0.55f + 0.45f * neonGlowPulse).coerceIn(0f, 1f))
             )
+        } else if (owner == 0 && isToxicNode) {
+            Text(
+                text = "☣",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Black,
+                    fontSize = when { size >= 44.dp -> 13.sp; size >= 28.dp -> 10.sp; else -> 8.sp },
+                    shadow = Shadow(color = toxicPulseColor, offset = Offset.Zero, blurRadius = 12f)
+                ),
+                color = toxicPulseColor.copy(alpha = (0.55f + 0.45f * neonGlowPulse).coerceIn(0f, 1f))
+            )
         } else if (owner != 0) {
-            if (isGoldenNode) {
-                Text(
-                    text = "+2",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontWeight = FontWeight.Black,
-                        fontSize = when { size >= 44.dp -> 16.sp; size >= 28.dp -> 13.sp; else -> 10.sp },
-                        shadow = Shadow(color = solarFlareGold, offset = Offset.Zero, blurRadius = 16f)
-                    ),
-                    color = solarFlareGold,
-                    modifier = Modifier
-                        .graphicsLayer {
-                            scaleX = charJumpScale.value
-                            scaleY = charJumpScale.value
-                            translationY = goldenFloatOffset.value
-                        }
-                        .testTag("golden_bonus_${row}_${col}")
-                )
-            } else {
-                Text(
-                    text = if (owner == 1) "P1" else if (owner == 2 && playerAccentColor(2) == ProtocolMagenta) "CPU" else "P$owner",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontWeight = FontWeight.Black,
-                        fontSize = when { size >= 44.dp -> 15.sp; size >= 28.dp -> 12.sp; else -> 9.sp },
-                        shadow = Shadow(color = accentColor, offset = Offset.Zero, blurRadius = 14f)
-                    ),
-                    color = palette.primaryText,
-                    modifier = Modifier.scale(charJumpScale.value)
-                )
+            when {
+                isGoldenNode -> {
+                    Text(
+                        text = "+2",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Black,
+                            fontSize = when { size >= 44.dp -> 16.sp; size >= 28.dp -> 13.sp; else -> 10.sp },
+                            shadow = Shadow(color = solarFlareGold, offset = Offset.Zero, blurRadius = 16f)
+                        ),
+                        color = solarFlareGold,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = charJumpScale.value
+                                scaleY = charJumpScale.value
+                                translationY = floatingDeltaOffset.value
+                            }
+                            .testTag("golden_bonus_${row}_${col}")
+                    )
+                }
+                isToxicNode -> {
+                    Text(
+                        text = "-1",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Black,
+                            fontSize = when { size >= 44.dp -> 16.sp; size >= 28.dp -> 13.sp; else -> 10.sp },
+                            shadow = Shadow(color = toxicRed, offset = Offset.Zero, blurRadius = 16f)
+                        ),
+                        color = toxicRed,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = charJumpScale.value
+                                scaleY = charJumpScale.value
+                                translationY = floatingDeltaOffset.value
+                            }
+                            .testTag("toxic_penalty_${row}_${col}")
+                    )
+                }
+                else -> {
+                    Text(
+                        text = if (owner == 1) "P1" else if (owner == 2 && playerAccentColor(2) == ProtocolMagenta) "CPU" else "P$owner",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Black,
+                            fontSize = when { size >= 44.dp -> 15.sp; size >= 28.dp -> 12.sp; else -> 9.sp },
+                            shadow = Shadow(color = accentColor, offset = Offset.Zero, blurRadius = 14f)
+                        ),
+                        color = palette.primaryText,
+                        modifier = Modifier.scale(charJumpScale.value)
+                    )
+                }
             }
         }
     }
