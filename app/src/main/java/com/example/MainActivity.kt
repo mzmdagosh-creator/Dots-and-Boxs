@@ -1827,11 +1827,7 @@ fun NeonTutorialOverlay(onDismiss: () -> Unit) {
             Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = ProtocolCyan, modifier = Modifier.size(48.dp))
                 Text("SYSTEM BOOT: TUTORIAL", style = MaterialTheme.typography.headlineMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black), color = ProtocolCyan, textAlign = TextAlign.Center)
-                Text("1. Tap between glowing dots to draw a line.
-2. Draw the 4th line to complete a box.
-3. Capturing a box grants an EXTRA TURN.
-4. Chain captures for PROTOCOL OVERDRIVE combos!
-5. Outscore the CPU or your friends to win.", style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp), color = palette.primaryText)
+                Text("1. Tap between glowing dots to draw a line.\n2. Draw the 4th line to complete a box.\n3. Capturing a box grants an EXTRA TURN.\n4. Chain captures for PROTOCOL OVERDRIVE combos!\n5. Outscore the CPU or your friends to win.", style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp), color = palette.primaryText)
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth().height(50.dp).padding(top = 8.dp),
