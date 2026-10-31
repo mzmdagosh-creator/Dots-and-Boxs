@@ -920,6 +920,7 @@ data class MatchHistoryItem(val matchNumber: Int, val gridSizeLabel: String, val
 data class GameUiState(
     val currentScreen: ScreenDestination = ScreenDestination.SETUP,
     val unlockedAchievements: Set<String> = emptySet(),
+    val hasSeenTutorial: Boolean = false,
     val achievementToastQueue: List<AchievementProtocol> = emptyList(),
     val mainMenuSection: MainMenuSection = MainMenuSection.CAMPAIGN,
     val soundEnabled: Boolean = true,
@@ -961,6 +962,7 @@ class GameViewModel : ViewModel() {
         const val KEY_MATCH_HISTORY_JSON = "dots_and_boxes_match_history"
         const val KEY_TOTAL_MATCHES = "dots_and_boxes_total_matches"
         const val KEY_UNLOCKED_ACHIEVEMENTS = "dots_and_boxes_achievements"
+        const val KEY_HAS_SEEN_TUTORIAL = "has_seen_tutorial"
     }
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -980,6 +982,7 @@ class GameViewModel : ViewModel() {
         val loadedHistory = loadMatchHistoryFromPrefs(prefs)
         val savedTotalMatches = prefs.getInt(KEY_TOTAL_MATCHES, loadedHistory.maxOfOrNull { it.matchNumber } ?: 0).coerceAtLeast(0)
         val savedAchievements = prefs.getStringSet(KEY_UNLOCKED_ACHIEVEMENTS, emptySet()) ?: emptySet()
+        val savedTutorial = prefs.getBoolean(KEY_HAS_SEEN_TUTORIAL, false)
 
         HapticEngine.isHapticsEnabled = savedHaptics
         _uiState.update { state ->
@@ -992,7 +995,8 @@ class GameViewModel : ViewModel() {
                 sessionStats = loadedStats ?: state.sessionStats,
                 matchHistory = if (loadedHistory.isNotEmpty()) loadedHistory else state.matchHistory,
                 totalMatchesCompleted = max(state.totalMatchesCompleted, savedTotalMatches),
-                unlockedAchievements = savedAchievements
+                unlockedAchievements = savedAchievements,
+                hasSeenTutorial = savedTutorial
             )
         }
     }
@@ -1131,6 +1135,23 @@ class GameViewModel : ViewModel() {
     }
 
     fun toggleHaptics() { setHapticsEnabled(!_uiState.value.hapticsEnabled) }
+    
+    fun completeTutorial() {
+        SoundEngine.playLineClick()
+        sharedPreferences?.edit()?.putBoolean(KEY_HAS_SEEN_TUTORIAL, true)?.apply()
+        _uiState.update { it.copy(hasSeenTutorial = true) }
+    }
+
+    fun selectPlayerCount(count: Int) {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update { state ->
+            state.copy(
+                selectedPlayerCount = count,
+                selectedGameMode = if (count == 1) GameMode.CPU else GameMode.PVP
+            )
+        }
+    }
 
     fun clearPersistentData() {
         SoundEngine.playLineClick()
@@ -1142,6 +1163,7 @@ class GameViewModel : ViewModel() {
             ?.remove(KEY_MATCH_HISTORY_JSON)
             ?.putInt(KEY_TOTAL_MATCHES, 0)
             ?.remove(KEY_UNLOCKED_ACHIEVEMENTS)
+            ?.remove(KEY_HAS_SEEN_TUTORIAL)
             ?.apply()
         _uiState.update { state ->
             state.copy(
@@ -1151,6 +1173,7 @@ class GameViewModel : ViewModel() {
                 activeCampaignLevel = null,
                 justUnlockedNextCampaignLevel = false,
                 unlockedAchievements = emptySet(),
+                hasSeenTutorial = false,
                 sessionStats = mapOf(1 to PlayerSessionStats(), 2 to PlayerSessionStats(), 3 to PlayerSessionStats(), 4 to PlayerSessionStats()),
                 matchHistory = emptyList(),
                 totalMatchesCompleted = 0
@@ -1293,7 +1316,17 @@ class GameViewModel : ViewModel() {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
         val durationSec = if (state.selectedTimerMode.durationSeconds > 0) state.selectedTimerMode.durationSeconds.toFloat() else 5.0f
-        val initialBoard = BoardState.create(humanPlayerCount = 1, letters = listOf("P1", "CPU"), cpuDifficulty = state.selectedCpuDifficulty, boxRows = state.selectedGridSize.boxRows, boxCols = state.selectedGridSize.boxCols)
+        
+        val humanCount = if (state.selectedGameMode == GameMode.CPU) 1 else state.selectedPlayerCount
+        val letters = if (humanCount == 1) listOf("P1", "CPU") else (1..humanCount).map { "P" + it }
+        val initialBoard = BoardState.create(
+            humanPlayerCount = humanCount,
+            letters = letters,
+            cpuDifficulty = state.selectedCpuDifficulty,
+            boxRows = state.selectedGridSize.boxRows,
+            boxCols = state.selectedGridSize.boxCols
+        )
+
         _uiState.update {
             it.copy(
                 currentScreen = ScreenDestination.GAME,
@@ -1594,6 +1627,8 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                 when (destination) {
                     ScreenDestination.SETUP -> {
                         CommandCenterScreen(
+                            hasSeenTutorial = uiState.hasSeenTutorial,
+                            onCompleteTutorial = viewModel::completeTutorial,
                             unlockedAchievements = uiState.unlockedAchievements,
                             nodesCaptured = uiState.totalBoxesCaptured,
                             unlockedCampaignLevel = uiState.unlockedCampaignLevel,
@@ -1608,6 +1643,8 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                     }
                     ScreenDestination.QUICK_CONFIG -> {
                         QuickMatchConfigScreen(
+                            selectedPlayerCount = uiState.selectedPlayerCount,
+                            onSelectPlayerCount = viewModel::selectPlayerCount,
                             selectedGridSize = uiState.selectedGridSize,
                             selectedCpuDifficulty = uiState.selectedCpuDifficulty,
                             selectedTimerMode = uiState.selectedTimerMode,
@@ -1661,6 +1698,8 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
 
 @Composable
 fun CommandCenterScreen(
+    hasSeenTutorial: Boolean = false,
+    onCompleteTutorial: () -> Unit = {},
     unlockedAchievements: Set<String> = emptySet(),
     nodesCaptured: Int = 0,
     unlockedCampaignLevel: Int = 1,
@@ -1761,6 +1800,47 @@ fun CommandCenterScreen(
                 sessionStats = sessionStats,
                 matchHistory = matchHistory
             )
+        }
+        
+        if (!hasSeenTutorial) {
+            NeonTutorialOverlay(onDismiss = onCompleteTutorial)
+        }
+    }
+}
+
+@Composable
+fun NeonTutorialOverlay(onDismiss: () -> Unit) {
+    val palette = LocalGamePalette.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {} 
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.widthIn(max = 400.dp).border(2.dp, ProtocolCyan, RoundedCornerShape(20.dp)),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = palette.surfaceElevated)
+        ) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = ProtocolCyan, modifier = Modifier.size(48.dp))
+                Text("SYSTEM BOOT: TUTORIAL", style = MaterialTheme.typography.headlineMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black), color = ProtocolCyan, textAlign = TextAlign.Center)
+                Text("1. Tap between glowing dots to draw a line.
+2. Draw the 4th line to complete a box.
+3. Capturing a box grants an EXTRA TURN.
+4. Chain captures for PROTOCOL OVERDRIVE combos!
+5. Outscore the CPU or your friends to win.", style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp), color = palette.primaryText)
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().height(50.dp).padding(top = 8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ProtocolCyan, contentColor = Color.Black),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("INITIALIZE PROTOCOL", style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black))
+                }
+            }
         }
     }
 }
@@ -2029,6 +2109,7 @@ fun DashboardAchievementsCard(unlockedIds: Set<String>, modifier: Modifier = Mod
 
 @Composable
 fun QuickMatchConfigScreen(
+    selectedPlayerCount: Int, onSelectPlayerCount: (Int) -> Unit,
     selectedGridSize: GridSize, selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
     onSelectGridSize: (GridSize) -> Unit, onSelectCpuDifficulty: (CpuDifficulty) -> Unit, onSelectTimerMode: (TimerMode) -> Unit,
     onStartMatch: () -> Unit, onBackToCommandCenter: () -> Unit, modifier: Modifier = Modifier
@@ -2069,9 +2150,35 @@ fun QuickMatchConfigScreen(
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(text = "PROTOCOL PARAMETERS", style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black), color = ProtocolTextPrimary)
-                        Text(text = "Select Grid Size, CPU Difficulty, and Time Limit before entering The Grid Arena.", style = MaterialTheme.typography.bodyMedium, color = ProtocolTextMuted)
+                        Text(text = "Select Player Mode, Grid Size, CPU Difficulty, and Time Limit.", style = MaterialTheme.typography.bodyMedium, color = ProtocolTextMuted)
+                    }
+                    
+                    // 0. PLAYERS SECTION
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "MULTIPLAYER CONFIG", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = ProtocolLime)
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(1, 2, 3, 4).forEach { pCount ->
+                                val isSelected = selectedPlayerCount == pCount
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) ProtocolLime else ProtocolElevatedSurface)
+                                        .border(width = if (isSelected) 2.dp else 1.dp, color = if (isSelected) ProtocolLime else ProtocolBorder, shape = RoundedCornerShape(12.dp))
+                                        .clickable { onSelectPlayerCount(pCount) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = if (pCount == 1) "1P vs CPU" else "${pCount}P", style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), color = if (isSelected) Color.Black else ProtocolTextPrimary)
+                                }
+                            }
+                        }
                     }
 
+                    // 1. GRID SIZE DROPDOWN + TOGGLE CHIPS (3x3, 4x4, 5x5, 6x6)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "GRID SIZE", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = ProtocolCyan)
@@ -2117,7 +2224,9 @@ fun QuickMatchConfigScreen(
                         }
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 2. CPU DIFFICULTY DROPDOWN + TOGGLE CHIPS (Easy, Medium, Hard)
+                    AnimatedVisibility(visible = selectedPlayerCount == 1) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "CPU DIFFICULTY", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = ProtocolAmber)
                             Box {
@@ -2162,7 +2271,9 @@ fun QuickMatchConfigScreen(
                             }
                         }
                     }
+                    } // End AnimatedVisibility
 
+                    // 3. TIME LIMIT DROPDOWN + TOGGLE CHIPS (Relaxed, 3s, 5s, 10s)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "TIME LIMIT", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = ProtocolMagenta)
@@ -2855,10 +2966,10 @@ private fun PlayerScorePill(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(modifier = Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(palette.backgroundDeep).border(1.5.dp, accentColor, RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
-                Text(text = if (player.isAi) "AI" else "P1", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, fontSize = 11.sp), color = accentColor)
+                Text(text = if (player.isAi) "AI" else "P${player.playerNumber}", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, fontSize = 11.sp), color = accentColor)
             }
             Column {
-                Text(text = if (player.isAi) "CPU (MAGENTA)" else "USER (CYAN)", style = MaterialTheme.typography.labelSmall, color = accentColor)
+                Text(text = if (player.isAi) "CPU (MAGENTA)" else "USER P${player.playerNumber}", style = MaterialTheme.typography.labelSmall, color = accentColor)
                 Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(if (isCurrentTurn) accentColor else palette.backgroundDeep.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 1.dp)) {
                     Text(text = when { isCurrentTurn && player.isAi -> "CPU THINKING…"; isCurrentTurn -> "YOUR TURN"; else -> "WAITING" }, style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.5.sp, fontWeight = FontWeight.Bold), color = if (isCurrentTurn) Color.Black else palette.mutedText)
                 }
@@ -3045,7 +3156,7 @@ private fun PlayableBoxCell(row: Int, col: Int, owner: Int, isNewlyCaptured: Boo
 
         if (owner != 0) {
             Text(
-                text = if (owner == 1) "P1" else "CPU",
+                text = if (owner == 1) "P1" else if (owner == 2 && playerAccentColor(2) == ProtocolMagenta) "CPU" else "P$owner",
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Black,
@@ -3068,12 +3179,16 @@ private fun GameOverBanner(
     val winner = boardState.winner
     val accentColor = if (winner != null && winner > 0) playerAccentColor(winner) else palette.streakAccent
     val titleText = if (winner != null && winner > 0) {
-        val winnerName = if (boardState.isPlayerAi(winner)) "CPU" else "User"
+        val winnerName = if (boardState.isPlayerAi(winner)) "CPU" else "Player $winner"
         "$winnerName Wins with ${boardState.scoreForPlayer(winner)} Nodes!"
     } else {
         "Match Drawn — Tied at ${boardState.maxScore}!"
     }
-    val summaryScores = "User: ${boardState.player1Score}  •  CPU: ${boardState.player2Score}"
+    
+    val summaryScores = boardState.players.joinToString("  •  ") { p -> 
+        val name = if (p.isAi) "CPU" else "P${p.playerNumber}"
+        "$name: ${boardState.scoreForPlayer(p.playerNumber)}" 
+    }
     val nextLevel = activeCampaignLevel?.nextLevel()
     val canAdvanceCampaign = activeCampaignLevel != null && winner == 1 && nextLevel != null
 
@@ -3171,7 +3286,7 @@ private fun FullScreenVictoryAnimationOverlay(
             val headlineText = when {
                 winner == null || winner == 0 -> "Match Drawn — Tied at ${boardState.maxScore}!"
                 boardState.isPlayerAi(winner) -> "CPU WINS (${boardState.scoreForPlayer(winner)} NODES)"
-                else -> "USER VICTORY! (${boardState.scoreForPlayer(winner)} NODES)"
+                else -> "PLAYER $winner VICTORY! (${boardState.scoreForPlayer(winner)} NODES)"
             }
             val nextLevel = activeCampaignLevel?.nextLevel()
             val canAdvanceCampaign = activeCampaignLevel != null && winner == 1 && nextLevel != null
@@ -3188,7 +3303,10 @@ private fun FullScreenVictoryAnimationOverlay(
                     Text(text = "PROTOCOL COMPLETE • WINNER DECLARED", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold), color = palette.streakAccent, textAlign = TextAlign.Center)
                     Text(text = headlineText, style = MaterialTheme.typography.titleLarge.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, shadow = Shadow(color = winnerAccent, offset = Offset.Zero, blurRadius = 18f)), color = palette.primaryText, textAlign = TextAlign.Center)
 
-                    val scoreBreakdown = "User (Cyan): ${boardState.player1Score}   •   CPU (Magenta): ${boardState.player2Score}"
+                    val scoreBreakdown = boardState.players.joinToString("   •   ") { p -> 
+                        val name = if (p.isAi) "CPU" else "P${p.playerNumber}"
+                        "$name: ${boardState.scoreForPlayer(p.playerNumber)}" 
+                    }
                     Text(text = scoreBreakdown, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = winnerAccent, textAlign = TextAlign.Center)
 
                     if (activeCampaignLevel != null) {
