@@ -2303,8 +2303,7 @@ fun CommandCenterScreen(
             DashboardSessionHistoryCard(
             DashboardAchievementsCard(
                 unlockedIds = unlockedAchievements
-            )
-
+            ),
                 sessionStats = sessionStats,
                 matchHistory = matchHistory
             )
