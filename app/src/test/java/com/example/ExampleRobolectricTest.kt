@@ -57,14 +57,15 @@ class ExampleRobolectricTest {
         viewModel.toggleHaptics()
         assertFalse(viewModel.uiState.value.hapticsEnabled)
 
-        // Volume & Camera Shake Settings
+        // Volume & Performance Mode Settings
         viewModel.openSettingsScreen()
         assertEquals(ScreenDestination.SETTINGS, viewModel.uiState.value.currentScreen)
         viewModel.setSoundVolume(0.45f)
         assertEquals(0.45f, viewModel.uiState.value.soundVolume, 0.001f)
         assertEquals(0.45f, SoundEngine.masterVolume, 0.001f)
-        viewModel.setCameraShakeEnabled(false)
-        assertFalse(viewModel.uiState.value.cameraShakeEnabled)
+        assertFalse(viewModel.uiState.value.performanceMode)
+        viewModel.setPerformanceMode(true)
+        assertTrue(viewModel.uiState.value.performanceMode)
         viewModel.closeSettingsScreen()
         assertEquals(ScreenDestination.SETUP, viewModel.uiState.value.currentScreen)
 

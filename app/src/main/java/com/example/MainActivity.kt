@@ -427,9 +427,10 @@ object SoundEngine {
 
     fun playLineClick() {
         if (!isSoundEnabled || masterVolume <= 0f) return
+        val currentVol = masterVolume
         audioScope.launch {
             runCatching {
-                val samples = synthesizeFrequencySweep(540.0, 170.0, 38, 0.28, 45.0)
+                val samples = synthesizeFrequencySweep(540.0, 170.0, 38, 0.28, 45.0, currentVol)
                 playPcmBuffer(samples)
             }
         }
@@ -437,10 +438,11 @@ object SoundEngine {
 
     fun playBoxPop(comboCount: Int = 1) {
         if (!isSoundEnabled || masterVolume <= 0f) return
+        val currentVol = masterVolume
         audioScope.launch {
             runCatching {
                 val pitchMultiplier = (1.0 + (comboCount.coerceAtLeast(1) - 1) * 0.12).coerceAtMost(1.85)
-                val samples = synthesizeFrequencySweep(310.0 * pitchMultiplier, 660.0 * pitchMultiplier, 125, 0.42, 18.0)
+                val samples = synthesizeFrequencySweep(310.0 * pitchMultiplier, 660.0 * pitchMultiplier, 125, 0.42, 18.0, currentVol)
                 playPcmBuffer(samples)
             }
         }
@@ -448,6 +450,7 @@ object SoundEngine {
 
     fun playGameEndFanfare() {
         if (!isSoundEnabled || masterVolume <= 0f) return
+        val currentVol = masterVolume
         audioScope.launch {
             runCatching {
                 val notes = listOf(523.25 to 110, 659.25 to 110, 783.99 to 110, 1046.50 to 290)
@@ -455,7 +458,7 @@ object SoundEngine {
                 val combined = ShortArray(totalSamples)
                 var offset = 0
                 for ((freq, durationMs) in notes) {
-                    val noteSamples = synthesizeFrequencySweep(freq, freq * 1.01, durationMs, 0.38, 8.5)
+                    val noteSamples = synthesizeFrequencySweep(freq, freq * 1.01, durationMs, 0.38, 8.5, currentVol)
                     val copyLen = noteSamples.size.coerceAtMost(combined.size - offset)
                     System.arraycopy(noteSamples, 0, combined, offset, copyLen)
                     offset += copyLen
@@ -465,18 +468,25 @@ object SoundEngine {
         }
     }
 
-    private fun synthesizeFrequencySweep(startFreqHz: Double, endFreqHz: Double, durationMs: Int, amplitude: Double, decayRate: Double): ShortArray {
+    private fun synthesizeFrequencySweep(
+        startFreqHz: Double,
+        endFreqHz: Double,
+        durationMs: Int,
+        amplitude: Double,
+        decayRate: Double,
+        volume: Float = masterVolume
+    ): ShortArray {
         val numSamples = ((SAMPLE_RATE * durationMs) / 1000).coerceAtLeast(1)
         val buffer = ShortArray(numSamples)
         var phase = 0.0
-        val effectiveAmplitude = amplitude * masterVolume.coerceIn(0f, 1f).toDouble()
+        val gain = volume.coerceIn(0f, 1f).toDouble()
         for (i in 0 until numSamples) {
             val progress = i.toDouble() / numSamples
             val instantFreq = startFreqHz + (endFreqHz - startFreqHz) * progress
             phase += (2.0 * PI * instantFreq) / SAMPLE_RATE
             val attack = (i / (SAMPLE_RATE * 0.004)).coerceAtMost(1.0)
             val envelope = attack * exp(-decayRate * progress)
-            val sampleValue = (sin(phase) * effectiveAmplitude * envelope * Short.MAX_VALUE).toInt()
+            val sampleValue = (sin(phase) * (amplitude * gain) * envelope * Short.MAX_VALUE).toInt()
             buffer[i] = sampleValue.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
         return buffer
@@ -484,7 +494,11 @@ object SoundEngine {
 
     private fun playPcmBuffer(samples: ShortArray) {
         if (samples.isEmpty() || masterVolume <= 0f) return
-        val byteSize = samples.size * 2
+        val minBufSize = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        ).coerceAtLeast(samples.size * 2)
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -499,16 +513,15 @@ object SoundEngine {
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                     .build()
             )
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .setBufferSizeInBytes(byteSize)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setBufferSizeInBytes(minBufSize)
             .build()
-        track.write(samples, 0, samples.size)
-        track.play()
-        val sleepMs = ((samples.size * 1000L) / SAMPLE_RATE) + 45L
-        Thread.sleep(sleepMs)
-        runCatching {
-            track.stop()
-            track.release()
+        try {
+            track.play()
+            track.write(samples, 0, samples.size)
+        } finally {
+            runCatching { track.stop() }
+            runCatching { track.release() }
         }
     }
 }
@@ -939,7 +952,7 @@ data class GameUiState(
     val soundEnabled: Boolean = true,
     val soundVolume: Float = 1.0f,
     val hapticsEnabled: Boolean = true,
-    val cameraShakeEnabled: Boolean = true,
+    val performanceMode: Boolean = false,
     val totalBoxesCaptured: Int = 0,
     val unlockedCampaignLevel: Int = 1,
     val selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
@@ -973,7 +986,7 @@ class GameViewModel : ViewModel() {
         const val KEY_UNLOCKED_LEVEL = "unlocked_campaign_level"
         const val KEY_TOTAL_BOXES_CAPTURED = "total_boxes_captured"
         const val KEY_HAPTICS_ENABLED = "haptics_enabled"
-        const val KEY_CAMERA_SHAKE_ENABLED = "camera_shake_enabled"
+        const val KEY_PERFORMANCE_MODE = "performance_mode"
         const val KEY_SOUND_VOLUME = "sound_volume"
         const val KEY_SESSION_STATS_JSON = "dots_and_boxes_session_stats"
         const val KEY_MATCH_HISTORY_JSON = "dots_and_boxes_match_history"
@@ -995,7 +1008,7 @@ class GameViewModel : ViewModel() {
         val savedLevel = prefs.getInt(KEY_UNLOCKED_LEVEL, 1).coerceIn(1, CampaignLevel.entries.size)
         val savedBoxes = prefs.getInt(KEY_TOTAL_BOXES_CAPTURED, 0).coerceAtLeast(0)
         val savedHaptics = prefs.getBoolean(KEY_HAPTICS_ENABLED, true)
-        val savedCameraShake = prefs.getBoolean(KEY_CAMERA_SHAKE_ENABLED, true)
+        val savedPerformanceMode = prefs.getBoolean(KEY_PERFORMANCE_MODE, false)
         val savedSoundVolume = prefs.getFloat(KEY_SOUND_VOLUME, 1.0f).coerceIn(0f, 1f)
         val loadedStats = loadSessionStatsFromPrefs(prefs)
         val loadedHistory = loadMatchHistoryFromPrefs(prefs)
@@ -1013,7 +1026,7 @@ class GameViewModel : ViewModel() {
                 selectedCampaignLevel = CampaignLevel.fromNumber(effectiveLevel),
                 totalBoxesCaptured = max(state.totalBoxesCaptured, savedBoxes),
                 hapticsEnabled = savedHaptics,
-                cameraShakeEnabled = savedCameraShake,
+                performanceMode = savedPerformanceMode,
                 soundVolume = savedSoundVolume,
                 soundEnabled = savedSoundVolume > 0.001f,
                 sessionStats = loadedStats ?: state.sessionStats,
@@ -1194,11 +1207,11 @@ class GameViewModel : ViewModel() {
         _uiState.update { it.copy(soundVolume = clamped, soundEnabled = enabled) }
     }
 
-    fun setCameraShakeEnabled(enabled: Boolean) {
+    fun setPerformanceMode(enabled: Boolean) {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
-        sharedPreferences?.edit()?.putBoolean(KEY_CAMERA_SHAKE_ENABLED, enabled)?.apply()
-        _uiState.update { it.copy(cameraShakeEnabled = enabled) }
+        sharedPreferences?.edit()?.putBoolean(KEY_PERFORMANCE_MODE, enabled)?.apply()
+        _uiState.update { it.copy(performanceMode = enabled) }
     }
 
     fun selectPlayerCount(count: Int) {
@@ -1688,6 +1701,7 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                 when (destination) {
                     ScreenDestination.SETUP -> {
                         CommandCenterScreen(
+                            performanceMode = uiState.performanceMode,
                             unlockedAchievements = uiState.unlockedAchievements,
                             nodesCaptured = uiState.totalBoxesCaptured,
                             unlockedCampaignLevel = uiState.unlockedCampaignLevel,
@@ -1703,6 +1717,7 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                     }
                     ScreenDestination.QUICK_CONFIG -> {
                         QuickMatchConfigScreen(
+                            performanceMode = uiState.performanceMode,
                             selectedPlayerCount = uiState.selectedPlayerCount,
                             onSelectPlayerCount = viewModel::selectPlayerCount,
                             selectedGridSize = uiState.selectedGridSize,
@@ -1721,7 +1736,7 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             onCompleteTutorial = viewModel::completeTutorial,
                             soundEnabled = uiState.soundEnabled,
                             hapticsEnabled = uiState.hapticsEnabled,
-                            cameraShakeEnabled = uiState.cameraShakeEnabled,
+                            performanceMode = uiState.performanceMode,
                             activeCampaignLevel = uiState.activeCampaignLevel,
                             justUnlockedNextCampaignLevel = uiState.justUnlockedNextCampaignLevel,
                             selectedGridSize = uiState.selectedGridSize,
@@ -1751,16 +1766,19 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                         )
                     }
                     ScreenDestination.CREDITS -> {
-                        CreditsScreen(onBack = viewModel::closeCreditsScreen)
+                        CreditsScreen(
+                            performanceMode = uiState.performanceMode,
+                            onBack = viewModel::closeCreditsScreen
+                        )
                     }
                     ScreenDestination.SETTINGS -> {
                         SettingsScreen(
                             soundVolume = uiState.soundVolume,
                             hapticsEnabled = uiState.hapticsEnabled,
-                            cameraShakeEnabled = uiState.cameraShakeEnabled,
+                            performanceMode = uiState.performanceMode,
                             onSoundVolumeChange = viewModel::setSoundVolume,
                             onHapticsEnabledChange = viewModel::setHapticsEnabled,
-                            onCameraShakeEnabledChange = viewModel::setCameraShakeEnabled,
+                            onPerformanceModeChange = viewModel::setPerformanceMode,
                             onReplayTutorial = viewModel::replayTutorial,
                             onWipeSaveData = viewModel::clearPersistentData,
                             onOpenCredits = viewModel::openCreditsScreen,
@@ -1775,6 +1793,7 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
 
 @Composable
 fun CommandCenterScreen(
+    performanceMode: Boolean = false,
     unlockedAchievements: Set<String> = emptySet(),
     nodesCaptured: Int = 0,
     unlockedCampaignLevel: Int = 1,
@@ -1821,25 +1840,27 @@ fun CommandCenterScreen(
     }
 
     Box(
-        modifier = modifier.fillMaxSize().background(Color(0xFF121212)).testTag("command_center_screen"),
+        modifier = modifier.fillMaxSize().background(ObsidianBackground).testTag("command_center_screen"),
         contentAlignment = Alignment.TopCenter
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().testTag("drifting_neon_dots_background")) {
-            val width = size.width
-            val height = size.height
-            if (width <= 0f || height <= 0f) return@Canvas
-            val angle = driftProgress * 2f * PI.toFloat()
-            floatingDots.forEach { dot ->
-                val phaseAngle = angle + dot.phaseOffset * 2f * PI.toFloat()
-                val offsetX = cos(phaseAngle * dot.speedX) * (width * 0.045f)
-                val offsetY = sin(phaseAngle * dot.speedY) * (height * 0.045f)
-                val centerX = ((dot.xFraction * width + offsetX) % width + width) % width
-                val centerY = ((dot.yFraction * height + offsetY) % height + height) % height
-                val dotColor = if (dot.isCyan) ProtocolCyan else ProtocolMagenta
-                val radiusPx = dot.radiusDp.dp.toPx()
+        if (!performanceMode) {
+            Canvas(modifier = Modifier.fillMaxSize().testTag("drifting_neon_dots_background")) {
+                val width = size.width
+                val height = size.height
+                if (width <= 0f || height <= 0f) return@Canvas
+                val angle = driftProgress * 2f * PI.toFloat()
+                floatingDots.forEach { dot ->
+                    val phaseAngle = angle + dot.phaseOffset * 2f * PI.toFloat()
+                    val offsetX = cos(phaseAngle * dot.speedX) * (width * 0.045f)
+                    val offsetY = sin(phaseAngle * dot.speedY) * (height * 0.045f)
+                    val centerX = ((dot.xFraction * width + offsetX) % width + width) % width
+                    val centerY = ((dot.yFraction * height + offsetY) % height + height) % height
+                    val dotColor = if (dot.isCyan) ProtocolCyan else ProtocolMagenta
+                    val radiusPx = dot.radiusDp.dp.toPx()
 
-                drawCircle(color = dotColor.copy(alpha = dot.baseAlpha * 0.4f), radius = radiusPx * 2.5f, center = Offset(centerX, centerY))
-                drawCircle(color = dotColor.copy(alpha = dot.baseAlpha), radius = radiusPx, center = Offset(centerX, centerY))
+                    drawCircle(color = dotColor.copy(alpha = dot.baseAlpha * 0.4f), radius = radiusPx * 2.5f, center = Offset(centerX, centerY))
+                    drawCircle(color = dotColor.copy(alpha = dot.baseAlpha), radius = radiusPx, center = Offset(centerX, centerY))
+                }
             }
         }
 
@@ -2175,6 +2196,7 @@ fun DashboardAchievementsCard(unlockedIds: Set<String>, modifier: Modifier = Mod
 
 @Composable
 fun QuickMatchConfigScreen(
+    performanceMode: Boolean = false,
     selectedPlayerCount: Int, onSelectPlayerCount: (Int) -> Unit,
     selectedGridSize: GridSize, selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
     onSelectGridSize: (GridSize) -> Unit, onSelectCpuDifficulty: (CpuDifficulty) -> Unit, onSelectTimerMode: (TimerMode) -> Unit,
@@ -2187,8 +2209,10 @@ fun QuickMatchConfigScreen(
 
     BackHandler { onBackToCommandCenter() }
 
-    Box(modifier = modifier.fillMaxSize().background(Color(0xFF121212)).testTag("quick_match_config_screen"), contentAlignment = Alignment.TopCenter) {
-        DriftingNeonDotsBackground()
+    Box(modifier = modifier.fillMaxSize().background(ObsidianBackground).testTag("quick_match_config_screen"), contentAlignment = Alignment.TopCenter) {
+        if (!performanceMode) {
+            DriftingNeonDotsBackground()
+        }
         Column(
             modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).verticalScroll(scrollState).padding(horizontal = 18.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -2505,10 +2529,10 @@ fun DriftingNeonDotsBackground(modifier: Modifier = Modifier) {
 fun SettingsScreen(
     soundVolume: Float,
     hapticsEnabled: Boolean,
-    cameraShakeEnabled: Boolean,
+    performanceMode: Boolean,
     onSoundVolumeChange: (Float) -> Unit,
     onHapticsEnabledChange: (Boolean) -> Unit,
-    onCameraShakeEnabledChange: (Boolean) -> Unit,
+    onPerformanceModeChange: (Boolean) -> Unit,
     onReplayTutorial: () -> Unit,
     onWipeSaveData: () -> Unit,
     onOpenCredits: () -> Unit = {},
@@ -2524,11 +2548,13 @@ fun SettingsScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(ObsidianBackground)
             .testTag("settings_screen"),
         contentAlignment = Alignment.TopCenter
     ) {
-        DriftingNeonDotsBackground()
+        if (!performanceMode) {
+            DriftingNeonDotsBackground()
+        }
 
         Column(
             modifier = Modifier
@@ -2700,7 +2726,7 @@ fun SettingsScreen(
                         )
                     }
 
-                    // 3. PERFORMANCE: Toggle for "Camera Shake (Disable for performance)"
+                    // 3. PERFORMANCE: Switch for "Performance Mode (Disable particles & background)"
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2708,12 +2734,12 @@ fun SettingsScreen(
                             .background(ProtocolElevatedSurface)
                             .border(
                                 width = 1.dp,
-                                color = if (cameraShakeEnabled) ProtocolMagenta.copy(alpha = 0.6f) else ProtocolBorder,
+                                color = if (performanceMode) ProtocolMagenta.copy(alpha = 0.6f) else ProtocolBorder,
                                 shape = RoundedCornerShape(14.dp)
                             )
-                            .clickable { onCameraShakeEnabledChange(!cameraShakeEnabled) }
+                            .clickable { onPerformanceModeChange(!performanceMode) }
                             .padding(horizontal = 14.dp, vertical = 12.dp)
-                            .testTag("settings_camera_shake_row"),
+                            .testTag("settings_performance_mode_row"),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -2725,12 +2751,12 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Filled.Bolt,
                                 contentDescription = null,
-                                tint = if (cameraShakeEnabled) ProtocolMagenta else ProtocolTextMuted,
+                                tint = if (performanceMode) ProtocolMagenta else ProtocolTextMuted,
                                 modifier = Modifier.size(22.dp)
                             )
                             Column {
                                 Text(
-                                    text = "Camera Shake (Disable for performance)",
+                                    text = "Performance Mode (Disable particles & background)",
                                     style = MaterialTheme.typography.labelLarge.copy(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontWeight = FontWeight.Bold
@@ -2738,22 +2764,22 @@ fun SettingsScreen(
                                     color = ProtocolTextPrimary
                                 )
                                 Text(
-                                    text = "Kinetic arena recoil during node captures and overdrive combos",
+                                    text = "Disables background dots, screen shake, particle bursts, and heavy overlays",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = ProtocolTextMuted
                                 )
                             }
                         }
                         Switch(
-                            checked = cameraShakeEnabled,
-                            onCheckedChange = onCameraShakeEnabledChange,
+                            checked = performanceMode,
+                            onCheckedChange = onPerformanceModeChange,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
                                 checkedTrackColor = ProtocolMagenta,
                                 uncheckedThumbColor = ProtocolTextMuted,
                                 uncheckedTrackColor = ProtocolDarkBackground
                             ),
-                            modifier = Modifier.testTag("settings_camera_shake_switch")
+                            modifier = Modifier.testTag("settings_performance_mode_switch")
                         )
                     }
 
@@ -2877,7 +2903,7 @@ fun SettingsScreen(
 }
 
 @Composable
-fun CreditsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun CreditsScreen(performanceMode: Boolean = false, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val palette = LocalGamePalette.current
     val scrollState = rememberScrollState()
     BackHandler { onBack() }
@@ -2885,8 +2911,10 @@ fun CreditsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val infiniteTransition = rememberInfiniteTransition(label = "creditsGlowTransition")
     val borderGlow by infiniteTransition.animateFloat(initialValue = 0.6f, targetValue = 1.0f, animationSpec = infiniteRepeatable(animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse), label = "creditsBorderGlow")
 
-    Box(modifier = modifier.fillMaxSize().background(Color(0xFF121212)).testTag("credits_screen"), contentAlignment = Alignment.Center) {
-        DriftingNeonDotsBackground()
+    Box(modifier = modifier.fillMaxSize().background(ObsidianBackground).testTag("credits_screen"), contentAlignment = Alignment.Center) {
+        if (!performanceMode) {
+            DriftingNeonDotsBackground()
+        }
         Column(modifier = Modifier.fillMaxWidth().widthIn(max = 540.dp).verticalScroll(scrollState).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth().shadow(24.dp, RoundedCornerShape(26.dp), spotColor = palette.p1Accent.copy(alpha = borderGlow)).border(width = 2.5.dp, brush = Brush.linearGradient(colors = listOf(palette.p1Accent.copy(alpha = borderGlow), palette.p2Accent.copy(alpha = borderGlow), palette.p1Accent.copy(alpha = borderGlow))), shape = RoundedCornerShape(26.dp)).testTag("credits_screen_card"),
@@ -2949,7 +2977,7 @@ private fun CreditSectionCard(icon: ImageVector, text: String, accentColor: Colo
 fun GridArenaScreen(
     hasSeenTutorial: Boolean = false,
     onCompleteTutorial: () -> Unit = {},
-    soundEnabled: Boolean, hapticsEnabled: Boolean, cameraShakeEnabled: Boolean = true, activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
+    soundEnabled: Boolean, hapticsEnabled: Boolean, performanceMode: Boolean = false, activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
     selectedGridSize: GridSize, selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
     blitzRemainingSeconds: Float, blitzRemainingFraction: Float, lastTurnForfeitedByTimeout: Boolean,
     boardState: BoardState, hoveredEdge: EdgeCoordinate?, boardZoom: Float, lastHapticEvent: HapticEvent?, victoryAnimationTriggerId: Int,
@@ -3026,15 +3054,16 @@ fun GridArenaScreen(
     val overlayBurstScale = remember { Animatable(0f) }
     val overlayBurstAlpha = remember { Animatable(0f) }
 
-    LaunchedEffect(boardState.comboTriggerId, cameraShakeEnabled) {
-        if (!cameraShakeEnabled) {
+    LaunchedEffect(boardState.comboTriggerId, performanceMode) {
+        if (performanceMode) {
             cameraShakeAnim.snapTo(0f)
+            overlayBurstAlpha.snapTo(0f)
         }
         if (boardState.comboTriggerId > 0) {
             val isCombo = boardState.currentComboCount >= 2 || boardState.lastCapturedBoxes.size >= 2
             val targetZoomPunch = if (isCombo) 1.04f + (boardState.currentComboCount.coerceAtMost(6) * 0.007f) else 1.015f
 
-            if (cameraShakeEnabled) {
+            if (!performanceMode) {
                 launch {
                     val shakeMagnitude = if (isCombo) 8f else 3.5f
                     for (step in listOf(1f, -0.85f, 0.7f, -0.5f, 0.3f, 0f)) {
@@ -3056,7 +3085,7 @@ fun GridArenaScreen(
                 comboPulseWaveAnim.animateTo(targetValue = 0f, animationSpec = tween(durationMillis = 680, easing = FastOutSlowInEasing))
             }
 
-            if (isCombo) {
+            if (isCombo && !performanceMode) {
                 launch {
                     overlayBurstScale.snapTo(0.3f)
                     overlayBurstAlpha.snapTo(1f)
@@ -3076,8 +3105,10 @@ fun GridArenaScreen(
     val activeComboColor = playerAccentColor(boardState.currentPlayer)
     val pulseGlowAlpha = comboPulseWaveAnim.value
 
-    Box(modifier = modifier.fillMaxSize().background(Color(0xFF121212)).padding(horizontal = 10.dp, vertical = 6.dp).testTag("grid_arena_screen"), contentAlignment = Alignment.Center) {
-        DriftingNeonDotsBackground()
+    Box(modifier = modifier.fillMaxSize().background(ObsidianBackground).padding(horizontal = 10.dp, vertical = 6.dp).testTag("grid_arena_screen"), contentAlignment = Alignment.Center) {
+        if (!performanceMode) {
+            DriftingNeonDotsBackground()
+        }
         Column(
             modifier = Modifier.fillMaxSize().widthIn(max = 820.dp).graphicsLayer { translationX = cameraShakeAnim.value; translationY = -cameraShakeAnim.value * 0.6f },
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -3199,6 +3230,7 @@ fun GridArenaScreen(
                             DotsAndBoxesGrid(
                                 boardState = boardState, hoveredEdge = hoveredEdge,
                                 neonGlowPulse = neonGlowPulse, comboPulseFraction = pulseGlowAlpha,
+                                performanceMode = performanceMode,
                                 dotSlotSize = scaledDotSlotSize, boxSize = scaledBoxSize,
                                 onEdgeHover = onEdgeHover, onEdgeClick = onHumanMoveExecuted
                             )
@@ -3215,7 +3247,7 @@ fun GridArenaScreen(
             )
         }
 
-        if (overlayBurstAlpha.value > 0.02f && boardState.currentComboCount >= 2) {
+        if (!performanceMode && overlayBurstAlpha.value > 0.02f && boardState.currentComboCount >= 2) {
             val isDouble = boardState.lastCapturedBoxes.size >= 2
             val mainTitle = if (isDouble) "DOUBLE NODE CAPTURE!" else "COMBO x${boardState.currentComboCount}!"
             val subTitle = if (isDouble) "COMBO x${boardState.currentComboCount} STREAK!" else "PROTOCOL OVERDRIVE!"
@@ -3231,6 +3263,7 @@ fun GridArenaScreen(
         if (boardState.isGameOver) {
             FullScreenVictoryAnimationOverlay(
                 boardState = boardState, triggerId = victoryAnimationTriggerId,
+                performanceMode = performanceMode,
                 activeCampaignLevel = activeCampaignLevel, justUnlockedNextCampaignLevel = justUnlockedNextCampaignLevel,
                 onAdvanceToNextCampaignLevel = onAdvanceToNextCampaignLevel, onPlayAgain = onRestartMatch, onReturnToSetup = onReturnToCommandCenter
             )
@@ -3507,6 +3540,7 @@ private fun PlayerScorePill(
 @Composable
 private fun DotsAndBoxesGrid(
     boardState: BoardState, hoveredEdge: EdgeCoordinate?, neonGlowPulse: Float, comboPulseFraction: Float,
+    performanceMode: Boolean = false,
     dotSlotSize: Dp, boxSize: Dp, onEdgeHover: (EdgeCoordinate?) -> Unit, onEdgeClick: (EdgeCoordinate) -> Unit
 ) {
     val activePlayerColor = playerAccentColor(boardState.currentPlayer)
@@ -3543,7 +3577,8 @@ private fun DotsAndBoxesGrid(
                             val isInComboChain = boardState.isMultiSquareCombo && boardState.comboChainBoxes.contains(boxCoord)
                             PlayableBoxCell(
                                 row = dotRow, col = dotCol, owner = boxOwner, isNewlyCaptured = isNewlyCaptured,
-                                isInComboChain = isInComboChain, comboPulseFraction = if (isNewlyCaptured || isInComboChain) comboPulseFraction else 0f, size = boxSize
+                                isInComboChain = isInComboChain, comboPulseFraction = if (isNewlyCaptured || isInComboChain) comboPulseFraction else 0f,
+                                performanceMode = performanceMode, size = boxSize
                             )
                         }
                     }
@@ -3632,7 +3667,10 @@ private fun VerticalEdgeCell(
 }
 
 @Composable
-private fun PlayableBoxCell(row: Int, col: Int, owner: Int, isNewlyCaptured: Boolean, isInComboChain: Boolean, comboPulseFraction: Float, size: Dp) {
+private fun PlayableBoxCell(
+    row: Int, col: Int, owner: Int, isNewlyCaptured: Boolean,
+    isInComboChain: Boolean, comboPulseFraction: Float, performanceMode: Boolean = false, size: Dp
+) {
     val palette = LocalGamePalette.current
     val accentColor = if (owner != 0) playerAccentColor(owner) else Color.Transparent
     val boxFillColor by animateColorAsState(targetValue = if (owner != 0) accentColor.copy(alpha = 0.40f) else Color.Transparent, animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing), label = "boxFillColorAnim")
@@ -3663,18 +3701,20 @@ private fun PlayableBoxCell(row: Int, col: Int, owner: Int, isNewlyCaptured: Boo
             .testTag("box_${row}_${col}"),
         contentAlignment = Alignment.Center
     ) {
-        if (isNewlyCaptured && comboPulseFraction > 0.02f && owner != 0) {
-            val particleProgress = 1f - comboPulseFraction
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val center = Offset(this.size.width / 2f, this.size.height / 2f)
-                val maxRadius = this.size.maxDimension * 0.85f
-                val particleCount = 12
-                for (i in 0 until particleCount) {
-                    val angle = (2.0 * PI * i) / particleCount
-                    val distance = maxRadius * particleProgress
-                    val px = center.x + (cos(angle) * distance).toFloat()
-                    val py = center.y + (sin(angle) * distance).toFloat()
-                    drawCircle(color = accentColor.copy(alpha = comboPulseFraction), radius = (3.5.dp.toPx() * comboPulseFraction).coerceAtLeast(1f), center = Offset(px, py))
+        if (!performanceMode) {
+            if (isNewlyCaptured && comboPulseFraction > 0.02f && owner != 0) {
+                val particleProgress = 1f - comboPulseFraction
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val center = Offset(this.size.width / 2f, this.size.height / 2f)
+                    val maxRadius = this.size.maxDimension * 0.85f
+                    val particleCount = 12
+                    for (i in 0 until particleCount) {
+                        val angle = (2.0 * PI * i) / particleCount
+                        val distance = maxRadius * particleProgress
+                        val px = center.x + (cos(angle) * distance).toFloat()
+                        val py = center.y + (sin(angle) * distance).toFloat()
+                        drawCircle(color = accentColor.copy(alpha = comboPulseFraction), radius = (3.5.dp.toPx() * comboPulseFraction).coerceAtLeast(1f), center = Offset(px, py))
+                    }
                 }
             }
         }
@@ -3750,7 +3790,8 @@ private data class ConfettiParticleSpec(val angleRad: Float, val speedFactor: Fl
 
 @Composable
 private fun FullScreenVictoryAnimationOverlay(
-    boardState: BoardState, triggerId: Int, activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
+    boardState: BoardState, triggerId: Int, performanceMode: Boolean = false,
+    activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
     onAdvanceToNextCampaignLevel: () -> Unit, onPlayAgain: () -> Unit, onReturnToSetup: () -> Unit
 ) {
     val palette = LocalGamePalette.current
@@ -3770,10 +3811,14 @@ private fun FullScreenVictoryAnimationOverlay(
         }
     }
 
-    val particles = remember {
-        List(76) { idx ->
-            val goldenAngle = idx * 2.3999632f
-            ConfettiParticleSpec(angleRad = goldenAngle, speedFactor = 0.25f + ((idx * 37) % 100) / 100f * 0.85f, startXFraction = ((idx * 19) % 100) / 100f, fallSpeed = 0.4f + ((idx * 29) % 70) / 100f, driftAmplitude = 18f + (idx % 5) * 9f, rotationSpeed = (idx % 7 - 3) * 120f, sizeDp = 5f + (idx % 4) * 2.5f, colorIndex = idx % 5)
+    val particles = remember(performanceMode) {
+        if (performanceMode) {
+            emptyList()
+        } else {
+            List(76) { idx ->
+                val goldenAngle = idx * 2.3999632f
+                ConfettiParticleSpec(angleRad = goldenAngle, speedFactor = 0.25f + ((idx * 37) % 100) / 100f * 0.85f, startXFraction = ((idx * 19) % 100) / 100f, fallSpeed = 0.4f + ((idx * 29) % 70) / 100f, driftAmplitude = 18f + (idx % 5) * 9f, rotationSpeed = (idx % 7 - 3) * 120f, sizeDp = 5f + (idx % 4) * 2.5f, colorIndex = idx % 5)
+            }
         }
     }
     val confettiColors = listOf(palette.p1Accent, palette.p2Accent, palette.streakAccent, palette.p3Accent, palette.p4Accent)
