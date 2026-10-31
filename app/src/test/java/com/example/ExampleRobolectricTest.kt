@@ -43,6 +43,8 @@ class ExampleRobolectricTest {
         prefs.edit()
             .putInt(GameViewModel.KEY_UNLOCKED_LEVEL, 4)
             .putInt(GameViewModel.KEY_TOTAL_BOXES_CAPTURED, 27)
+            .putInt(GameViewModel.KEY_RANK_POINTS, 225)
+            .putString(GameViewModel.KEY_SELECTED_THEME, ThemeColor.PLASMA_PURPLE.name)
             .commit()
 
         val viewModel = GameViewModel()
@@ -51,13 +53,16 @@ class ExampleRobolectricTest {
         assertEquals(4, viewModel.uiState.value.unlockedCampaignLevel)
         assertEquals(27, viewModel.uiState.value.totalBoxesCaptured)
         assertEquals(CampaignLevel.LEVEL_4, viewModel.uiState.value.selectedCampaignLevel)
+        assertEquals(225, viewModel.uiState.value.rankPoints)
+        assertEquals(RankedDivision.GOLD, viewModel.calculateRank())
+        assertEquals(ThemeColor.PLASMA_PURPLE, viewModel.uiState.value.selectedTheme)
 
         // Toggle Haptics
         assertTrue(viewModel.uiState.value.hapticsEnabled)
         viewModel.toggleHaptics()
         assertFalse(viewModel.uiState.value.hapticsEnabled)
 
-        // Volume & Performance Mode Settings
+        // Volume, Performance Mode, & Neon Theme Settings
         viewModel.openSettingsScreen()
         assertEquals(ScreenDestination.SETTINGS, viewModel.uiState.value.currentScreen)
         viewModel.setSoundVolume(0.45f)
@@ -66,6 +71,8 @@ class ExampleRobolectricTest {
         assertFalse(viewModel.uiState.value.performanceMode)
         viewModel.setPerformanceMode(true)
         assertTrue(viewModel.uiState.value.performanceMode)
+        viewModel.setSelectedTheme(ThemeColor.SOLAR_FLARE)
+        assertEquals(ThemeColor.SOLAR_FLARE, viewModel.uiState.value.selectedTheme)
         viewModel.closeSettingsScreen()
         assertEquals(ScreenDestination.SETUP, viewModel.uiState.value.currentScreen)
 
@@ -83,12 +90,17 @@ class ExampleRobolectricTest {
         viewModel.closeCreditsScreen()
         assertEquals(ScreenDestination.SETUP, viewModel.uiState.value.currentScreen)
 
-        // Clear Data resets Total Boxes Captured to 0 and Tournament Level Reached to 1
+        // Clear Data resets Total Boxes Captured to 0, Rank Points to 0, and Theme to CYBER_CYAN
         viewModel.clearPersistentData()
         assertEquals(1, viewModel.uiState.value.unlockedCampaignLevel)
         assertEquals(0, viewModel.uiState.value.totalBoxesCaptured)
+        assertEquals(0, viewModel.uiState.value.rankPoints)
+        assertEquals(RankedDivision.BRONZE, viewModel.calculateRank())
+        assertEquals(ThemeColor.CYBER_CYAN, viewModel.uiState.value.selectedTheme)
         assertEquals(1, prefs.getInt(GameViewModel.KEY_UNLOCKED_LEVEL, -1))
         assertEquals(0, prefs.getInt(GameViewModel.KEY_TOTAL_BOXES_CAPTURED, -1))
+        assertEquals(0, prefs.getInt(GameViewModel.KEY_RANK_POINTS, -1))
+        assertEquals(ThemeColor.CYBER_CYAN.name, prefs.getString(GameViewModel.KEY_SELECTED_THEME, null))
     }
 
     @Test
@@ -137,4 +149,40 @@ class ExampleRobolectricTest {
         assertEquals("Player 1 (A) Wins!", state.matchHistory[0].winnerLabel)
         assertEquals(1, state.matchHistory[0].winnerPlayerNumber)
     }
+
+    @Test
+    fun `grid mutations generate blocked edges and golden nodes and award +2 points`() {
+        val mutatedBoard = BoardState.create(boxRows = 4, boxCols = 4, mutationsEnabled = true)
+        assertTrue(mutatedBoard.mutationsEnabled)
+        assertTrue(mutatedBoard.blockedEdges.isNotEmpty())
+        assertTrue(mutatedBoard.goldenNodes.size in 1..3)
+
+        val blockedEdge = mutatedBoard.blockedEdges.first()
+        assertFalse(DotsAndBoxesEngine.isEdgeAvailable(mutatedBoard, blockedEdge))
+        assertEquals(null, DotsAndBoxesEngine.makeMove(mutatedBoard, blockedEdge))
+
+        // Verify Golden Node awards +2 points and game still ends when all boxes are claimed
+        val customBoard = BoardState.create(boxRows = 2, boxCols = 2, mutationsEnabled = false).copy(
+            goldenNodes = setOf(BoxCoordinate(0, 0))
+        )
+        var state = customBoard
+        state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 0, 0))!!.newState
+        state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.HORIZONTAL, 1, 0))!!.newState
+        state = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 0))!!.newState
+        // Player 2 completes the golden node (0,0)
+        val outcome = DotsAndBoxesEngine.makeMove(state, EdgeCoordinate(EdgeOrientation.VERTICAL, 0, 1))!!
+        assertEquals(2, outcome.newState.scoreForPlayer(2))
+        assertEquals(1, outcome.newState.totalClaimedBoxes)
+        assertFalse(outcome.newState.isGameOver)
+
+        // Verify Ranked Match forces mutationsEnabled = false
+        val viewModel = GameViewModel()
+        viewModel.selectMutationsEnabled(true)
+        assertTrue(viewModel.uiState.value.mutationsEnabled)
+        viewModel.startRankedMatch()
+        assertFalse(viewModel.uiState.value.boardState.mutationsEnabled)
+        assertTrue(viewModel.uiState.value.boardState.blockedEdges.isEmpty())
+        assertTrue(viewModel.uiState.value.boardState.goldenNodes.isEmpty())
+    }
 }
+

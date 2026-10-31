@@ -133,6 +133,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -200,6 +201,20 @@ val UnclaimedEdgeIdle = Color(0x339E9E9E)
 
 val SpaceGroteskFontFamily = FontFamily.SansSerif
 val JetBrainsMonoFontFamily = FontFamily.Monospace
+
+enum class ThemeColor(val label: String, val primary: Color) {
+    CYBER_CYAN("Cyber Cyan", Color(0xFF00E5FF)),
+    PLASMA_PURPLE("Plasma Purple", Color(0xFFA855F7)),
+    TOXIC_GREEN("Toxic Green", Color(0xFF00E676)),
+    SOLAR_FLARE("Solar Flare", Color(0xFFFFEA00));
+
+    val fill: Color get() = primary.copy(alpha = 0.4f)
+
+    companion object {
+        fun fromName(name: String?): ThemeColor =
+            entries.firstOrNull { it.name == name } ?: CYBER_CYAN
+    }
+}
 
 @Immutable
 data class GamePalette(
@@ -326,10 +341,24 @@ private val ProtocolTypography = Typography(
 )
 
 @Composable
-fun NeonGridProtocolTheme(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalGamePalette provides DarkProtocolPalette) {
+fun NeonGridProtocolTheme(
+    selectedTheme: ThemeColor = ThemeColor.CYBER_CYAN,
+    content: @Composable () -> Unit
+) {
+    val dynamicPalette = remember(selectedTheme) {
+        DarkProtocolPalette.copy(
+            p1Accent = selectedTheme.primary,
+            p1Fill = selectedTheme.fill
+        )
+    }
+    val dynamicColorScheme = remember(selectedTheme) {
+        DarkProtocolColorScheme.copy(
+            primary = selectedTheme.primary
+        )
+    }
+    CompositionLocalProvider(LocalGamePalette provides dynamicPalette) {
         MaterialTheme(
-            colorScheme = DarkProtocolColorScheme,
+            colorScheme = dynamicColorScheme,
             typography = ProtocolTypography,
             content = content
         )
@@ -576,13 +605,58 @@ enum class CampaignLevel(
     }
 }
 
+enum class RankedDivision(
+    val title: String,
+    val minRp: Int,
+    val maxRp: Int?,
+    val difficulty: CpuDifficulty,
+    val timerMode: TimerMode,
+    val gridSize: GridSize,
+    val color: Color
+) {
+    BRONZE("Bronze Division", 0, 99, CpuDifficulty.EASY, TimerMode.RELAXED, GridSize.SIZE_3X3, Color(0xFFCD7F32)),
+    SILVER("Silver Division", 100, 199, CpuDifficulty.MEDIUM, TimerMode.RELAXED, GridSize.SIZE_4X4, Color(0xFFC0C0C0)),
+    GOLD("Gold Division", 200, 299, CpuDifficulty.HARD, TimerMode.RELAXED, GridSize.SIZE_5X5, Color(0xFFFFEA00)),
+    PLATINUM("Platinum Division", 300, 399, CpuDifficulty.HARD, TimerMode.RAPID, GridSize.SIZE_5X5, Color(0xFF00E676)),
+    NEON("Neon Division", 400, null, CpuDifficulty.HARD, TimerMode.BLITZ, GridSize.SIZE_6X6, Color(0xFF00E5FF));
+
+    fun nextDivision(): RankedDivision? = entries.getOrNull(ordinal + 1)
+
+    fun progressToNext(rp: Int): Float {
+        val clamped = rp.coerceAtLeast(0)
+        return when (this) {
+            BRONZE -> (clamped / 100f).coerceIn(0f, 1f)
+            SILVER -> ((clamped - 100) / 100f).coerceIn(0f, 1f)
+            GOLD -> ((clamped - 200) / 100f).coerceIn(0f, 1f)
+            PLATINUM -> ((clamped - 300) / 100f).coerceIn(0f, 1f)
+            NEON -> 1.0f
+        }
+    }
+
+    companion object {
+        fun fromRp(rp: Int): RankedDivision = when {
+            rp >= 400 -> NEON
+            rp >= 300 -> PLATINUM
+            rp >= 200 -> GOLD
+            rp >= 100 -> SILVER
+            else -> BRONZE
+        }
+    }
+}
+
 enum class AchievementProtocol(val id: String, val title: String, val description: String, val isSecret: Boolean = false) {
-    INITIATION("ach_initiation", "Initiation", "Clear Campaign Level 1"),
-    TURING_TEST("ach_turing_test", "Turing Test Passed", "Defeat the Hard AI (Minimax) in a Quick Match"),
+    INITIATION("ach_initiation", "Initiation", "Win your first Ranked Circuit or Campaign match"),
+    TURING_TEST("ach_turing_test", "Turing Test Passed", "Defeat the Hard AI (Minimax) in a match"),
     CHAIN_REACTION("ach_chain_reaction", "Chain Reaction", "Capture 4 or more nodes in a single unbroken turn"),
     GHOST_IN_MACHINE("ach_ghost_machine", "Ghost in the Machine", "Shut out the CPU (Win a match where the AI scores 0)"),
     GRID_MASTER("ach_grid_master", "Grid Master", "Play a total of 50 matches"),
-    SYSTEM_FREEZE("ach_system_freeze", "System Freeze", "Win a Blitz match without letting the timer drop below 50%", true)
+    SYSTEM_FREEZE("ach_system_freeze", "System Freeze", "Win a Blitz match without letting the timer expire", true),
+    SILVER_CIRCUIT("ach_silver_circuit", "Silver Circuit", "Reach Silver Division (100+ RP) in Ranked Circuit"),
+    GOLD_STANDARD("ach_gold_standard", "Gold Standard", "Reach Gold Division (200+ RP) in Ranked Circuit"),
+    PLATINUM_OVERCLOCK("ach_platinum_overclock", "Platinum Overclock", "Reach Platinum Division (300+ RP) in Ranked Circuit"),
+    NEON_APEX("ach_neon_apex", "Neon Apex", "Reach Neon Division (400+ RP) in Ranked Circuit", true),
+    MAX_GRID_CONQUEROR("ach_max_grid", "6×6 Conqueror", "Win a match on the 6×6 Grid"),
+    CHAMELEON_PROTOCOL("ach_chameleon", "Chameleon Protocol", "Customize your Neon Theme in System Settings")
 }
 
 data class EdgeCoordinate(val orientation: EdgeOrientation, val row: Int, val col: Int)
@@ -602,13 +676,18 @@ data class BoardState(
     val horizontalEdges: List<List<Int>> = List(boxRows + 1) { List(boxCols) { 0 } },
     val verticalEdges: List<List<Int>> = List(boxRows) { List(boxCols + 1) { 0 } },
     val boxes: List<List<Int>> = List(boxRows) { List(boxCols) { 0 } },
+    val mutationsEnabled: Boolean = false,
+    val blockedEdges: Set<EdgeCoordinate> = emptySet(),
+    val goldenNodes: Set<BoxCoordinate> = emptySet(),
     val lastClaimedEdge: EdgeCoordinate? = null,
     val lastCapturedBoxes: Set<BoxCoordinate> = emptySet(),
     val comboChainBoxes: Set<BoxCoordinate> = emptySet(),
     val currentComboCount: Int = 0,
     val comboTriggerId: Int = 0,
     val hasExtraTurnStreak: Boolean = false,
-    val totalMovesPlayed: Int = 0
+    val totalMovesPlayed: Int = 0,
+    val matchStartTimeMs: Long = System.currentTimeMillis(),
+    val longestComboChain: Int = 0
 ) {
     val dotRows: Int get() = boxRows + 1
     val dotCols: Int get() = boxCols + 1
@@ -619,7 +698,7 @@ data class BoardState(
     val player2Letter: String get() = letterForPlayer(2)
     val player1Score: Int get() = scoreForPlayer(1)
     val player2Score: Int get() = scoreForPlayer(2)
-    val totalClaimedBoxes: Int get() = scores.values.sum()
+    val totalClaimedBoxes: Int get() = boxes.sumOf { row -> row.count { it != 0 } }
     val isGameOver: Boolean get() = totalClaimedBoxes == totalBoxes
     val isMultiSquareCombo: Boolean get() = currentComboCount >= 2
     val isCurrentPlayerAi: Boolean get() = !isGameOver && players.firstOrNull { it.playerNumber == currentPlayer }?.isAi == true
@@ -642,7 +721,14 @@ data class BoardState(
         const val DEFAULT_BOX_ROWS = 4
         const val DEFAULT_BOX_COLS = 4
 
-        fun create(humanPlayerCount: Int = 1, letters: List<String> = listOf("A", "C"), cpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM, boxRows: Int = DEFAULT_BOX_ROWS, boxCols: Int = DEFAULT_BOX_COLS): BoardState {
+        fun create(
+            humanPlayerCount: Int = 1,
+            letters: List<String> = listOf("A", "C"),
+            cpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
+            boxRows: Int = DEFAULT_BOX_ROWS,
+            boxCols: Int = DEFAULT_BOX_COLS,
+            mutationsEnabled: Boolean = false
+        ): BoardState {
             val safeRows = boxRows.coerceIn(2, 10)
             val safeCols = boxCols.coerceIn(2, 10)
             val coercedCount = humanPlayerCount.coerceIn(1, 4)
@@ -657,6 +743,60 @@ data class BoardState(
                     PlayerConfig(playerNumber = idx, letter = letters.getOrNull(idx - 1)?.ifBlank { fallback } ?: fallback, isAi = false)
                 }
             }
+
+            val generatedBlockedEdges = mutableSetOf<EdgeCoordinate>()
+            val generatedGoldenNodes = mutableSetOf<BoxCoordinate>()
+
+            if (mutationsEnabled) {
+                val internalEdges = mutableListOf<EdgeCoordinate>()
+                for (r in 1 until safeRows) {
+                    for (c in 0 until safeCols) {
+                        internalEdges.add(EdgeCoordinate(EdgeOrientation.HORIZONTAL, r, c))
+                    }
+                }
+                for (r in 0 until safeRows) {
+                    for (c in 1 until safeCols) {
+                        internalEdges.add(EdgeCoordinate(EdgeOrientation.VERTICAL, r, c))
+                    }
+                }
+
+                if (internalEdges.isNotEmpty()) {
+                    val fraction = Random.nextDouble(0.05, 0.15)
+                    val targetBlockedCount = (internalEdges.size * fraction).toInt().coerceAtLeast(1)
+                    val blockedCountPerBox = Array(safeRows) { IntArray(safeCols) }
+
+                    for (candidate in internalEdges.shuffled()) {
+                        if (generatedBlockedEdges.size >= targetBlockedCount) break
+                        val adjBoxes = mutableListOf<BoxCoordinate>()
+                        when (candidate.orientation) {
+                            EdgeOrientation.HORIZONTAL -> {
+                                if (candidate.row > 0) adjBoxes.add(BoxCoordinate(candidate.row - 1, candidate.col))
+                                if (candidate.row < safeRows) adjBoxes.add(BoxCoordinate(candidate.row, candidate.col))
+                            }
+                            EdgeOrientation.VERTICAL -> {
+                                if (candidate.col > 0) adjBoxes.add(BoxCoordinate(candidate.row, candidate.col - 1))
+                                if (candidate.col < safeCols) adjBoxes.add(BoxCoordinate(candidate.row, candidate.col))
+                            }
+                        }
+                        if (adjBoxes.all { blockedCountPerBox[it.row][it.col] < 2 }) {
+                            generatedBlockedEdges.add(candidate)
+                            for (box in adjBoxes) {
+                                blockedCountPerBox[box.row][box.col]++
+                            }
+                        }
+                    }
+                }
+
+                val allBoxes = mutableListOf<BoxCoordinate>()
+                for (r in 0 until safeRows) {
+                    for (c in 0 until safeCols) {
+                        allBoxes.add(BoxCoordinate(r, c))
+                    }
+                }
+                val goldenCount = Random.nextInt(1, 4).coerceAtMost(allBoxes.size)
+                generatedGoldenNodes.addAll(allBoxes.shuffled().take(goldenCount))
+            }
+
             return BoardState(
                 boxRows = safeRows,
                 boxCols = safeCols,
@@ -668,7 +808,12 @@ data class BoardState(
                 scores = playerConfigs.associate { it.playerNumber to 0 },
                 horizontalEdges = List(safeRows + 1) { List(safeCols) { 0 } },
                 verticalEdges = List(safeRows) { List(safeCols + 1) { 0 } },
-                boxes = List(safeRows) { List(safeCols) { 0 } }
+                boxes = List(safeRows) { List(safeCols) { 0 } },
+                mutationsEnabled = mutationsEnabled,
+                blockedEdges = generatedBlockedEdges,
+                goldenNodes = generatedGoldenNodes,
+                matchStartTimeMs = System.currentTimeMillis(),
+                longestComboChain = 0
             )
         }
     }
@@ -678,6 +823,7 @@ object DotsAndBoxesEngine {
     fun minimaxSearchDepth(boxRows: Int, boxCols: Int): Int = if (boxRows <= 4 && boxCols <= 4) 3 else 2
 
     fun isEdgeAvailable(state: BoardState, edge: EdgeCoordinate): Boolean {
+        if (state.blockedEdges.contains(edge)) return false
         return when (edge.orientation) {
             EdgeOrientation.HORIZONTAL -> edge.row in 0 until state.dotRows && edge.col in 0 until state.boxCols && state.horizontalEdges[edge.row][edge.col] == 0
             EdgeOrientation.VERTICAL -> edge.row in 0 until state.boxRows && edge.col in 0 until state.dotCols && state.verticalEdges[edge.row][edge.col] == 0
@@ -691,7 +837,7 @@ object DotsAndBoxesEngine {
     }
 
     fun makeMove(state: BoardState, edge: EdgeCoordinate): MoveOutcome? {
-        if (state.isGameOver) return null
+        if (state.isGameOver || state.blockedEdges.contains(edge)) return null
         val hMutable = state.horizontalEdges.map { it.toMutableList() }.toMutableList()
         val vMutable = state.verticalEdges.map { it.toMutableList() }.toMutableList()
         val boxesMutable = state.boxes.map { it.toMutableList() }.toMutableList()
@@ -716,18 +862,20 @@ object DotsAndBoxesEngine {
 
         val newlyCaptured = mutableListOf<BoxCoordinate>()
         for (box in candidateBoxes) {
-            if (boxesMutable[box.row][box.col] == 0 && isBoxCompleted(box.row, box.col, hMutable, vMutable)) {
+            if (boxesMutable[box.row][box.col] == 0 && isBoxCompleted(box.row, box.col, hMutable, vMutable, state.blockedEdges)) {
                 boxesMutable[box.row][box.col] = state.currentPlayer
                 newlyCaptured.add(box)
             }
         }
 
         val capturedCount = newlyCaptured.size
+        val pointsEarned = newlyCaptured.sumOf { box -> if (state.goldenNodes.contains(box)) 2 else 1 }
         val updatedScores = state.scores.toMutableMap()
-        updatedScores[state.currentPlayer] = (updatedScores[state.currentPlayer] ?: 0) + capturedCount
+        updatedScores[state.currentPlayer] = (updatedScores[state.currentPlayer] ?: 0) + pointsEarned
         val grantedExtraTurn = capturedCount > 0
         val nextPlayer = if (grantedExtraTurn) state.currentPlayer else (state.currentPlayer % state.activePlayerCount) + 1
         val newComboCount = if (grantedExtraTurn) state.currentComboCount + capturedCount else 0
+        val newLongestCombo = max(state.longestComboChain, newComboCount)
         val newComboChain = if (grantedExtraTurn) state.comboChainBoxes + newlyCaptured else emptySet()
         val newComboTriggerId = if (grantedExtraTurn) state.comboTriggerId + 1 else state.comboTriggerId
 
@@ -743,14 +891,15 @@ object DotsAndBoxesEngine {
             currentComboCount = newComboCount,
             comboTriggerId = newComboTriggerId,
             hasExtraTurnStreak = grantedExtraTurn,
-            totalMovesPlayed = state.totalMovesPlayed + 1
+            totalMovesPlayed = state.totalMovesPlayed + 1,
+            longestComboChain = newLongestCombo
         )
         return MoveOutcome(newState = updatedState, capturedBoxes = newlyCaptured, grantedExtraTurn = grantedExtraTurn)
     }
 
     fun cpuTakeTurn(state: BoardState, difficulty: CpuDifficulty = state.cpuDifficulty): EdgeCoordinate? {
         if (state.isGameOver) return null
-        val availableEdges = getAllAvailableEdges(state.boxRows, state.boxCols, state.horizontalEdges, state.verticalEdges)
+        val availableEdges = getAllAvailableEdges(state.boxRows, state.boxCols, state.horizontalEdges, state.verticalEdges, state.blockedEdges)
         if (availableEdges.isEmpty()) return null
         return when (difficulty) {
             CpuDifficulty.EASY -> chooseEasyCpuMove(availableEdges)
@@ -762,31 +911,45 @@ object DotsAndBoxesEngine {
     private fun chooseEasyCpuMove(availableEdges: List<EdgeCoordinate>): EdgeCoordinate = availableEdges.random()
 
     private fun chooseMediumCpuMove(state: BoardState, availableEdges: List<EdgeCoordinate>): EdgeCoordinate {
+        val goldenCaptures = mutableListOf<EdgeCoordinate>()
         val doubleCaptures = mutableListOf<EdgeCoordinate>()
         val singleCaptures = mutableListOf<EdgeCoordinate>()
         val safeMoves = mutableListOf<EdgeCoordinate>()
         val riskyMoves = mutableListOf<EdgeCoordinate>()
+        val goldenRiskyMoves = mutableListOf<EdgeCoordinate>()
 
         for (edge in availableEdges) {
             val adj = getAdjacentBoxes(edge, state.boxRows, state.boxCols)
             var completable = 0
+            var goldenCompletable = 0
             var thirdSidesCreated = 0
+            var goldenThirdCreated = 0
             for (box in adj) {
-                val sides = countClaimedSides(box.row, box.col, state.horizontalEdges, state.verticalEdges)
-                if (sides == 3) completable++
-                else if (sides == 2) thirdSidesCreated++
+                val sides = countClaimedSides(box.row, box.col, state.horizontalEdges, state.verticalEdges, state.blockedEdges)
+                val isGolden = state.goldenNodes.contains(box)
+                if (sides == 3) {
+                    completable++
+                    if (isGolden) goldenCompletable++
+                } else if (sides == 2) {
+                    thirdSidesCreated++
+                    if (isGolden) goldenThirdCreated++
+                }
             }
             when {
+                goldenCompletable > 0 -> goldenCaptures.add(edge)
                 completable >= 2 -> doubleCaptures.add(edge)
                 completable == 1 -> singleCaptures.add(edge)
                 thirdSidesCreated == 0 -> safeMoves.add(edge)
-                else -> riskyMoves.add(edge)
+                goldenThirdCreated == 0 -> riskyMoves.add(edge)
+                else -> goldenRiskyMoves.add(edge)
             }
         }
+        if (goldenCaptures.isNotEmpty()) return goldenCaptures.random()
         if (doubleCaptures.isNotEmpty()) return doubleCaptures.random()
         if (singleCaptures.isNotEmpty()) return singleCaptures.random()
         if (safeMoves.isNotEmpty()) return safeMoves.random()
-        return riskyMoves.random()
+        if (riskyMoves.isNotEmpty()) return riskyMoves.random()
+        return goldenRiskyMoves.random()
     }
 
     private fun chooseHardMinimaxMove(state: BoardState, availableEdges: List<EdgeCoordinate>): EdgeCoordinate {
@@ -818,7 +981,7 @@ object DotsAndBoxesEngine {
 
     private fun minimaxAlphaBeta(state: BoardState, depth: Int, alpha: Int, beta: Int, isMaximizing: Boolean, cpuPlayer: Int, humanPlayer: Int): Int {
         if (depth <= 0 || state.isGameOver) return evaluateBoardHeuristic(state, cpuPlayer, humanPlayer)
-        val available = getAllAvailableEdges(state.boxRows, state.boxCols, state.horizontalEdges, state.verticalEdges)
+        val available = getAllAvailableEdges(state.boxRows, state.boxCols, state.horizontalEdges, state.verticalEdges, state.blockedEdges)
         if (available.isEmpty()) return evaluateBoardHeuristic(state, cpuPlayer, humanPlayer)
 
         val ordered = orderMovesForPruning(state, available)
@@ -855,17 +1018,18 @@ object DotsAndBoxesEngine {
         val humanScore = state.scoreForPlayer(humanPlayer)
         var scoreDiff = (cpuScore - humanScore) * 100
         if (!state.isGameOver) {
-            var threeSidedCount = 0
+            var threeSidedWeight = 0
             for (r in 0 until state.boxRows) {
                 for (c in 0 until state.boxCols) {
-                    if (state.boxes[r][c] == 0 && countClaimedSides(r, c, state.horizontalEdges, state.verticalEdges) == 3) {
-                        threeSidedCount++
+                    if (state.boxes[r][c] == 0 && countClaimedSides(r, c, state.horizontalEdges, state.verticalEdges, state.blockedEdges) == 3) {
+                        val isGolden = state.goldenNodes.contains(BoxCoordinate(r, c))
+                        threeSidedWeight += if (isGolden) 85 else 35
                     }
                 }
             }
-            if (threeSidedCount > 0) {
-                if (state.currentPlayer == cpuPlayer) scoreDiff += threeSidedCount * 35
-                else scoreDiff -= threeSidedCount * 35
+            if (threeSidedWeight > 0) {
+                if (state.currentPlayer == cpuPlayer) scoreDiff += threeSidedWeight
+                else scoreDiff -= threeSidedWeight
             }
         }
         return scoreDiff
@@ -877,31 +1041,48 @@ object DotsAndBoxesEngine {
     private fun moveOrderingPriority(state: BoardState, edge: EdgeCoordinate): Int {
         val adj = getAdjacentBoxes(edge, state.boxRows, state.boxCols)
         var completable = 0
+        var goldenCompletable = 0
         var createsThird = 0
+        var goldenCreatesThird = 0
         for (box in adj) {
-            val sides = countClaimedSides(box.row, box.col, state.horizontalEdges, state.verticalEdges)
-            if (sides == 3) completable++
-            else if (sides == 2) createsThird++
+            val sides = countClaimedSides(box.row, box.col, state.horizontalEdges, state.verticalEdges, state.blockedEdges)
+            val isGolden = state.goldenNodes.contains(box)
+            if (sides == 3) {
+                completable++
+                if (isGolden) goldenCompletable++
+            } else if (sides == 2) {
+                createsThird++
+                if (isGolden) goldenCreatesThird++
+            }
         }
-        return when {
+        val basePriority = when {
             completable >= 2 -> 30
             completable == 1 -> 20
             createsThird == 0 -> 10
             createsThird == 1 -> -10
             else -> -20
         }
+        return basePriority + (goldenCompletable * 60) - (goldenCreatesThird * 55)
     }
 
-    private fun getAllAvailableEdges(boxRows: Int, boxCols: Int, hEdges: List<List<Int>>, vEdges: List<List<Int>>): List<EdgeCoordinate> {
+    private fun getAllAvailableEdges(
+        boxRows: Int,
+        boxCols: Int,
+        hEdges: List<List<Int>>,
+        vEdges: List<List<Int>>,
+        blockedEdges: Set<EdgeCoordinate> = emptySet()
+    ): List<EdgeCoordinate> {
         val list = mutableListOf<EdgeCoordinate>()
         for (r in 0..boxRows) {
             for (c in 0 until boxCols) {
-                if (hEdges[r][c] == 0) list.add(EdgeCoordinate(EdgeOrientation.HORIZONTAL, r, c))
+                val edge = EdgeCoordinate(EdgeOrientation.HORIZONTAL, r, c)
+                if (hEdges[r][c] == 0 && !blockedEdges.contains(edge)) list.add(edge)
             }
         }
         for (r in 0 until boxRows) {
             for (c in 0..boxCols) {
-                if (vEdges[r][c] == 0) list.add(EdgeCoordinate(EdgeOrientation.VERTICAL, r, c))
+                val edge = EdgeCoordinate(EdgeOrientation.VERTICAL, r, c)
+                if (vEdges[r][c] == 0 && !blockedEdges.contains(edge)) list.add(edge)
             }
         }
         return list
@@ -922,17 +1103,28 @@ object DotsAndBoxesEngine {
         return result
     }
 
-    private fun countClaimedSides(boxRow: Int, boxCol: Int, hEdges: List<List<Int>>, vEdges: List<List<Int>>): Int {
+    private fun countClaimedSides(
+        boxRow: Int,
+        boxCol: Int,
+        hEdges: List<List<Int>>,
+        vEdges: List<List<Int>>,
+        blockedEdges: Set<EdgeCoordinate> = emptySet()
+    ): Int {
         var count = 0
-        if (hEdges[boxRow][boxCol] != 0) count++
-        if (hEdges[boxRow + 1][boxCol] != 0) count++
-        if (vEdges[boxRow][boxCol] != 0) count++
-        if (vEdges[boxRow][boxCol + 1] != 0) count++
+        if (hEdges[boxRow][boxCol] != 0 || blockedEdges.contains(EdgeCoordinate(EdgeOrientation.HORIZONTAL, boxRow, boxCol))) count++
+        if (hEdges[boxRow + 1][boxCol] != 0 || blockedEdges.contains(EdgeCoordinate(EdgeOrientation.HORIZONTAL, boxRow + 1, boxCol))) count++
+        if (vEdges[boxRow][boxCol] != 0 || blockedEdges.contains(EdgeCoordinate(EdgeOrientation.VERTICAL, boxRow, boxCol))) count++
+        if (vEdges[boxRow][boxCol + 1] != 0 || blockedEdges.contains(EdgeCoordinate(EdgeOrientation.VERTICAL, boxRow, boxCol + 1))) count++
         return count
     }
 
-    private fun isBoxCompleted(boxRow: Int, boxCol: Int, hEdges: List<List<Int>>, vEdges: List<List<Int>>): Boolean =
-        countClaimedSides(boxRow, boxCol, hEdges, vEdges) == 4
+    private fun isBoxCompleted(
+        boxRow: Int,
+        boxCol: Int,
+        hEdges: List<List<Int>>,
+        vEdges: List<List<Int>>,
+        blockedEdges: Set<EdgeCoordinate> = emptySet()
+    ): Boolean = countClaimedSides(boxRow, boxCol, hEdges, vEdges, blockedEdges) == 4
 }
 
 enum class ScreenDestination { SETUP, QUICK_CONFIG, GAME, CREDITS, SETTINGS }
@@ -953,12 +1145,17 @@ data class GameUiState(
     val soundVolume: Float = 1.0f,
     val hapticsEnabled: Boolean = true,
     val performanceMode: Boolean = false,
+    val selectedTheme: ThemeColor = ThemeColor.CYBER_CYAN,
+    val rankPoints: Int = 0,
+    val isRankedMatch: Boolean = false,
+    val lastRpChange: Int? = null,
     val totalBoxesCaptured: Int = 0,
     val unlockedCampaignLevel: Int = 1,
     val selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
     val activeCampaignLevel: CampaignLevel? = null,
     val justUnlockedNextCampaignLevel: Boolean = false,
     val selectedGridSize: GridSize = GridSize.SIZE_4X4,
+    val mutationsEnabled: Boolean = false,
     val selectedGameMode: GameMode = GameMode.CPU,
     val selectedCpuDifficulty: CpuDifficulty = CpuDifficulty.MEDIUM,
     val selectedTimerMode: TimerMode = TimerMode.RELAXED,
@@ -988,6 +1185,8 @@ class GameViewModel : ViewModel() {
         const val KEY_HAPTICS_ENABLED = "haptics_enabled"
         const val KEY_PERFORMANCE_MODE = "performance_mode"
         const val KEY_SOUND_VOLUME = "sound_volume"
+        const val KEY_SELECTED_THEME = "selected_neon_theme"
+        const val KEY_RANK_POINTS = "rank_points"
         const val KEY_SESSION_STATS_JSON = "dots_and_boxes_session_stats"
         const val KEY_MATCH_HISTORY_JSON = "dots_and_boxes_match_history"
         const val KEY_TOTAL_MATCHES = "dots_and_boxes_total_matches"
@@ -1003,6 +1202,8 @@ class GameViewModel : ViewModel() {
     private var blitzTimerJob: Job? = null
     private var hapticEventCounter: Long = 0L
 
+    fun calculateRank(rp: Int = _uiState.value.rankPoints): RankedDivision = RankedDivision.fromRp(rp)
+
     fun attachSharedPreferences(prefs: SharedPreferences) {
         sharedPreferences = prefs
         val savedLevel = prefs.getInt(KEY_UNLOCKED_LEVEL, 1).coerceIn(1, CampaignLevel.entries.size)
@@ -1010,6 +1211,8 @@ class GameViewModel : ViewModel() {
         val savedHaptics = prefs.getBoolean(KEY_HAPTICS_ENABLED, true)
         val savedPerformanceMode = prefs.getBoolean(KEY_PERFORMANCE_MODE, false)
         val savedSoundVolume = prefs.getFloat(KEY_SOUND_VOLUME, 1.0f).coerceIn(0f, 1f)
+        val savedTheme = ThemeColor.fromName(prefs.getString(KEY_SELECTED_THEME, ThemeColor.CYBER_CYAN.name))
+        val savedRankPoints = prefs.getInt(KEY_RANK_POINTS, 0).coerceAtLeast(0)
         val loadedStats = loadSessionStatsFromPrefs(prefs)
         val loadedHistory = loadMatchHistoryFromPrefs(prefs)
         val savedTotalMatches = prefs.getInt(KEY_TOTAL_MATCHES, loadedHistory.maxOfOrNull { it.matchNumber } ?: 0).coerceAtLeast(0)
@@ -1029,6 +1232,8 @@ class GameViewModel : ViewModel() {
                 performanceMode = savedPerformanceMode,
                 soundVolume = savedSoundVolume,
                 soundEnabled = savedSoundVolume > 0.001f,
+                selectedTheme = savedTheme,
+                rankPoints = max(state.rankPoints, savedRankPoints),
                 sessionStats = loadedStats ?: state.sessionStats,
                 matchHistory = if (loadedHistory.isNotEmpty()) loadedHistory else state.matchHistory,
                 totalMatchesCompleted = max(state.totalMatchesCompleted, savedTotalMatches),
@@ -1112,33 +1317,48 @@ class GameViewModel : ViewModel() {
         sharedPreferences?.edit()?.putInt(KEY_TOTAL_BOXES_CAPTURED, clamped)?.apply()
     }
 
+    private fun saveRankPointsToPrefs(rankPoints: Int) {
+        val clamped = rankPoints.coerceAtLeast(0)
+        sharedPreferences?.edit()?.putInt(KEY_RANK_POINTS, clamped)?.apply()
+    }
+
     private fun unlockAchievement(achievement: AchievementProtocol) {
         val currentUnlocked = _uiState.value.unlockedAchievements
         if (!currentUnlocked.contains(achievement.id)) {
             val updated = currentUnlocked + achievement.id
             sharedPreferences?.edit()?.putStringSet(KEY_UNLOCKED_ACHIEVEMENTS, updated)?.apply()
-            _uiState.update { it.copy(unlockedAchievements = updated) }
+            _uiState.update {
+                it.copy(
+                    unlockedAchievements = updated,
+                    achievementToastQueue = it.achievementToastQueue + achievement
+                )
+            }
         }
     }
 
-    private fun checkAchievementsOnMatchEnd(boardState: BoardState) {
+    fun dismissAchievementToast() {
+        _uiState.update { state ->
+            if (state.achievementToastQueue.isEmpty()) state
+            else state.copy(achievementToastQueue = state.achievementToastQueue.drop(1))
+        }
+    }
+
+    private fun checkAchievementsOnMatchEnd(boardState: BoardState, updatedRankPoints: Int) {
         val winner = boardState.winner
         val cpuScore = boardState.scoreForPlayer(2)
-        val p1Score = boardState.scoreForPlayer(1)
 
-        // 1. Initiation: Clear Campaign Level 1
-        val activeLevel = _uiState.value.activeCampaignLevel
-        if (activeLevel != null && activeLevel.levelNumber == 1 && winner == 1) {
+        // 1. Initiation: Win first match or Campaign Level 1
+        if (winner == 1) {
             unlockAchievement(AchievementProtocol.INITIATION)
         }
 
-        // 2. Turing Test: Defeat Hard AI in Quick Match
-        if (activeLevel == null && boardState.cpuDifficulty == CpuDifficulty.HARD && winner == 1) {
+        // 2. Turing Test: Defeat Hard AI
+        if (boardState.cpuDifficulty == CpuDifficulty.HARD && winner == 1) {
             unlockAchievement(AchievementProtocol.TURING_TEST)
         }
 
         // 3. Chain Reaction: Captured 4+ boxes in a single unbroken turn
-        if (boardState.currentComboCount >= 4 || boardState.lastCapturedBoxes.size >= 4) {
+        if (boardState.longestComboChain >= 4 || boardState.currentComboCount >= 4 || boardState.lastCapturedBoxes.size >= 4) {
             unlockAchievement(AchievementProtocol.CHAIN_REACTION)
         }
 
@@ -1148,13 +1368,24 @@ class GameViewModel : ViewModel() {
         }
 
         // 5. Grid Master: Play 50 total matches
-        if (_uiState.value.totalMatchesCompleted >= 50) {
+        if (_uiState.value.totalMatchesCompleted + 1 >= 50) {
             unlockAchievement(AchievementProtocol.GRID_MASTER)
         }
 
         // 6. System Freeze: Win a Blitz match without timer expiry
         if (_uiState.value.selectedTimerMode == TimerMode.BLITZ && winner == 1 && !_uiState.value.lastTurnForfeitedByTimeout) {
             unlockAchievement(AchievementProtocol.SYSTEM_FREEZE)
+        }
+
+        // 7-10. Ranked Circuit Division Achievements
+        if (updatedRankPoints >= 100) unlockAchievement(AchievementProtocol.SILVER_CIRCUIT)
+        if (updatedRankPoints >= 200) unlockAchievement(AchievementProtocol.GOLD_STANDARD)
+        if (updatedRankPoints >= 300) unlockAchievement(AchievementProtocol.PLATINUM_OVERCLOCK)
+        if (updatedRankPoints >= 400) unlockAchievement(AchievementProtocol.NEON_APEX)
+
+        // 11. 6x6 Conqueror
+        if (winner == 1 && boardState.boxRows == 6 && boardState.boxCols == 6) {
+            unlockAchievement(AchievementProtocol.MAX_GRID_CONQUEROR)
         }
     }
 
@@ -1214,6 +1445,16 @@ class GameViewModel : ViewModel() {
         _uiState.update { it.copy(performanceMode = enabled) }
     }
 
+    fun setSelectedTheme(theme: ThemeColor) {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        sharedPreferences?.edit()?.putString(KEY_SELECTED_THEME, theme.name)?.apply()
+        _uiState.update { it.copy(selectedTheme = theme) }
+        if (theme != ThemeColor.CYBER_CYAN) {
+            unlockAchievement(AchievementProtocol.CHAMELEON_PROTOCOL)
+        }
+    }
+
     fun selectPlayerCount(count: Int) {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
@@ -1231,6 +1472,8 @@ class GameViewModel : ViewModel() {
         sharedPreferences?.edit()
             ?.putInt(KEY_UNLOCKED_LEVEL, 1)
             ?.putInt(KEY_TOTAL_BOXES_CAPTURED, 0)
+            ?.putInt(KEY_RANK_POINTS, 0)
+            ?.putString(KEY_SELECTED_THEME, ThemeColor.CYBER_CYAN.name)
             ?.remove(KEY_SESSION_STATS_JSON)
             ?.remove(KEY_MATCH_HISTORY_JSON)
             ?.putInt(KEY_TOTAL_MATCHES, 0)
@@ -1240,11 +1483,16 @@ class GameViewModel : ViewModel() {
         _uiState.update { state ->
             state.copy(
                 totalBoxesCaptured = 0,
+                rankPoints = 0,
+                isRankedMatch = false,
+                lastRpChange = null,
+                selectedTheme = ThemeColor.CYBER_CYAN,
                 unlockedCampaignLevel = 1,
                 selectedCampaignLevel = CampaignLevel.LEVEL_1,
                 activeCampaignLevel = null,
                 justUnlockedNextCampaignLevel = false,
                 unlockedAchievements = emptySet(),
+                achievementToastQueue = emptyList(),
                 hasSeenTutorial = false,
                 sessionStats = mapOf(1 to PlayerSessionStats(), 2 to PlayerSessionStats(), 3 to PlayerSessionStats(), 4 to PlayerSessionStats()),
                 matchHistory = emptyList(),
@@ -1312,16 +1560,31 @@ class GameViewModel : ViewModel() {
             val durationSec = if (state.selectedTimerMode.durationSeconds > 0) state.selectedTimerMode.durationSeconds.toFloat() else 5.0f
             state.copy(
                 selectedGridSize = gridSize,
+                isRankedMatch = false,
+                lastRpChange = null,
                 activeCampaignLevel = null,
                 justUnlockedNextCampaignLevel = false,
                 hoveredEdge = null,
                 lastTurnForfeitedByTimeout = false,
                 blitzRemainingSeconds = durationSec,
                 blitzRemainingFraction = 1f,
-                boardState = BoardState.create(humanPlayerCount = currentBoard.humanPlayerCount, letters = letters, cpuDifficulty = state.selectedCpuDifficulty, boxRows = gridSize.boxRows, boxCols = gridSize.boxCols)
+                boardState = BoardState.create(
+                    humanPlayerCount = currentBoard.humanPlayerCount,
+                    letters = letters,
+                    cpuDifficulty = state.selectedCpuDifficulty,
+                    boxRows = gridSize.boxRows,
+                    boxCols = gridSize.boxCols,
+                    mutationsEnabled = state.mutationsEnabled
+                )
             )
         }
         restartBlitzTimerIfNeeded()
+    }
+
+    fun selectMutationsEnabled(enabled: Boolean) {
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+        _uiState.update { state -> state.copy(mutationsEnabled = enabled, setupErrorResId = null) }
     }
 
     fun selectGameMode(mode: GameMode) {
@@ -1341,8 +1604,48 @@ class GameViewModel : ViewModel() {
     }
 
     fun resumeTournament() {
-        val highestUnlocked = CampaignLevel.fromNumber(_uiState.value.unlockedCampaignLevel)
-        startCampaignLevel(highestUnlocked)
+        startRankedMatch()
+    }
+
+    fun startRankedMatch() {
+        val state = _uiState.value
+        val division = calculateRank(state.rankPoints)
+        aiTurnJob?.cancel()
+        blitzTimerJob?.cancel()
+        SoundEngine.playLineClick()
+        emitHaptic(HapticEventType.LINE_TICK)
+
+        val durationSec = if (division.timerMode.durationSeconds > 0) division.timerMode.durationSeconds.toFloat() else 5.0f
+        val rankedBoard = BoardState.create(
+            humanPlayerCount = 1,
+            letters = listOf("P1", "CPU"),
+            cpuDifficulty = division.difficulty,
+            boxRows = division.gridSize.boxRows,
+            boxCols = division.gridSize.boxCols,
+            mutationsEnabled = false
+        )
+        _uiState.update {
+            it.copy(
+                currentScreen = ScreenDestination.GAME,
+                mainMenuSection = MainMenuSection.CAMPAIGN,
+                isRankedMatch = true,
+                lastRpChange = null,
+                activeCampaignLevel = null,
+                justUnlockedNextCampaignLevel = false,
+                selectedGridSize = division.gridSize,
+                selectedCpuDifficulty = division.difficulty,
+                selectedTimerMode = division.timerMode,
+                selectedGameMode = GameMode.CPU,
+                selectedPlayerCount = 1,
+                setupErrorResId = null,
+                hoveredEdge = null,
+                lastTurnForfeitedByTimeout = false,
+                blitzRemainingSeconds = durationSec,
+                blitzRemainingFraction = 1f,
+                boardState = rankedBoard
+            )
+        }
+        restartBlitzTimerIfNeeded()
     }
 
     fun startCampaignLevel(level: CampaignLevel = _uiState.value.selectedCampaignLevel) {
@@ -1353,11 +1656,20 @@ class GameViewModel : ViewModel() {
         SoundEngine.playLineClick()
         emitHaptic(HapticEventType.LINE_TICK)
 
-        val campaignBoard = BoardState.create(humanPlayerCount = 1, letters = listOf("P1", "CPU"), cpuDifficulty = level.difficulty, boxRows = level.gridSize.boxRows, boxCols = level.gridSize.boxCols)
+        val campaignBoard = BoardState.create(
+            humanPlayerCount = 1,
+            letters = listOf("P1", "CPU"),
+            cpuDifficulty = level.difficulty,
+            boxRows = level.gridSize.boxRows,
+            boxCols = level.gridSize.boxCols,
+            mutationsEnabled = false
+        )
         _uiState.update {
             it.copy(
                 currentScreen = ScreenDestination.GAME,
                 mainMenuSection = MainMenuSection.CAMPAIGN,
+                isRankedMatch = false,
+                lastRpChange = null,
                 selectedCampaignLevel = level,
                 activeCampaignLevel = level,
                 justUnlockedNextCampaignLevel = false,
@@ -1398,12 +1710,15 @@ class GameViewModel : ViewModel() {
             letters = letters,
             cpuDifficulty = state.selectedCpuDifficulty,
             boxRows = state.selectedGridSize.boxRows,
-            boxCols = state.selectedGridSize.boxCols
+            boxCols = state.selectedGridSize.boxCols,
+            mutationsEnabled = state.mutationsEnabled
         )
 
         _uiState.update {
             it.copy(
                 currentScreen = ScreenDestination.GAME,
+                isRankedMatch = false,
+                lastRpChange = null,
                 activeCampaignLevel = null,
                 justUnlockedNextCampaignLevel = false,
                 setupErrorResId = null,
@@ -1451,13 +1766,7 @@ class GameViewModel : ViewModel() {
         }
 
         val justFinished = newBoard.isGameOver && !_uiState.value.boardState.isGameOver
-        if (justFinished) {
-            blitzTimerJob?.cancel()
-            SoundEngine.playGameEndFanfare()
-            emitHaptic(HapticEventType.VICTORY_CELEBRATION, capturedCount)
-            checkAchievementsOnMatchEnd(newBoard)
-        }
-
+        var rankPointsToPersist: Int? = null
         var unlockedToPersist: Int? = null
         var boxesCapturedToPersist: Int? = null
         var performanceToPersist: Triple<Map<Int, PlayerSessionStats>, List<MatchHistoryItem>, Int>? = null
@@ -1481,6 +1790,17 @@ class GameViewModel : ViewModel() {
                 performanceToPersist = Triple(updatedStats, updatedHistory, nextMatchCount)
             }
 
+            val rpDelta: Int? = if (justFinished && state.isRankedMatch) {
+                if (newBoard.winner == 1) 25 else -15
+            } else {
+                state.lastRpChange
+            }
+            val updatedRankPoints = if (justFinished && state.isRankedMatch && rpDelta != null) {
+                (state.rankPoints + rpDelta).coerceAtLeast(0).also { rankPointsToPersist = it }
+            } else {
+                state.rankPoints
+            }
+
             val campaignLevel = state.activeCampaignLevel
             val playerWonCampaign = justFinished && campaignLevel != null && newBoard.winner == 1
             val newUnlockedLevel = if (playerWonCampaign && campaignLevel != null) {
@@ -1497,6 +1817,8 @@ class GameViewModel : ViewModel() {
             state.copy(
                 boardState = newBoard,
                 totalBoxesCaptured = updatedTotalBoxes,
+                rankPoints = updatedRankPoints,
+                lastRpChange = rpDelta,
                 unlockedCampaignLevel = newUnlockedLevel,
                 selectedCampaignLevel = if (newUnlockedLevel > state.unlockedCampaignLevel) CampaignLevel.fromNumber(newUnlockedLevel) else state.selectedCampaignLevel,
                 justUnlockedNextCampaignLevel = if (justFinished) didUnlockNew else state.justUnlockedNextCampaignLevel,
@@ -1511,6 +1833,14 @@ class GameViewModel : ViewModel() {
             )
         }
 
+        if (justFinished) {
+            blitzTimerJob?.cancel()
+            SoundEngine.playGameEndFanfare()
+            emitHaptic(HapticEventType.VICTORY_CELEBRATION, capturedCount)
+            checkAchievementsOnMatchEnd(newBoard, _uiState.value.rankPoints)
+        }
+
+        rankPointsToPersist?.let { saveRankPointsToPrefs(it) }
         unlockedToPersist?.let { saveUnlockedLevelToPrefs(it) }
         boxesCapturedToPersist?.let { saveTotalBoxesCapturedToPrefs(it) }
         performanceToPersist?.let { (stats, history, total) -> savePerformanceDataToPrefs(stats, history, total) }
@@ -1623,6 +1953,10 @@ class GameViewModel : ViewModel() {
     }
 
     fun restartMatch() {
+        if (_uiState.value.isRankedMatch) {
+            startRankedMatch()
+            return
+        }
         aiTurnJob?.cancel()
         blitzTimerJob?.cancel()
         SoundEngine.playLineClick()
@@ -1634,11 +1968,19 @@ class GameViewModel : ViewModel() {
         _uiState.update {
             it.copy(
                 hoveredEdge = null,
+                lastRpChange = null,
                 justUnlockedNextCampaignLevel = false,
                 lastTurnForfeitedByTimeout = false,
                 blitzRemainingSeconds = durationSec,
                 blitzRemainingFraction = 1f,
-                boardState = BoardState.create(humanPlayerCount = currentBoard.humanPlayerCount, letters = letters, cpuDifficulty = state.selectedCpuDifficulty, boxRows = state.selectedGridSize.boxRows, boxCols = state.selectedGridSize.boxCols)
+                boardState = BoardState.create(
+                    humanPlayerCount = currentBoard.humanPlayerCount,
+                    letters = letters,
+                    cpuDifficulty = state.selectedCpuDifficulty,
+                    boxRows = state.selectedGridSize.boxRows,
+                    boxCols = state.selectedGridSize.boxCols,
+                    mutationsEnabled = currentBoard.mutationsEnabled
+                )
             )
         }
         restartBlitzTimerIfNeeded()
@@ -1687,7 +2029,7 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    NeonGridProtocolTheme {
+    NeonGridProtocolTheme(selectedTheme = uiState.selectedTheme) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = ProtocolDarkBackground,
@@ -1704,15 +2046,13 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             performanceMode = uiState.performanceMode,
                             unlockedAchievements = uiState.unlockedAchievements,
                             nodesCaptured = uiState.totalBoxesCaptured,
-                            unlockedCampaignLevel = uiState.unlockedCampaignLevel,
-                            selectedCampaignLevel = uiState.selectedCampaignLevel,
+                            rankPoints = uiState.rankPoints,
+                            currentDivision = viewModel.calculateRank(uiState.rankPoints),
                             sessionStats = uiState.sessionStats,
                             matchHistory = uiState.matchHistory,
-                            onResumeCampaign = viewModel::resumeTournament,
+                            onStartRankedMatch = viewModel::startRankedMatch,
                             onOpenQuickMatch = viewModel::openQuickMatchConfig,
-                            onOpenSettings = viewModel::openSettingsScreen,
-                            onSelectCampaignLevel = viewModel::selectCampaignLevel,
-                            onStartCampaignLevel = viewModel::startCampaignLevel
+                            onOpenSettings = viewModel::openSettingsScreen
                         )
                     }
                     ScreenDestination.QUICK_CONFIG -> {
@@ -1721,6 +2061,8 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             selectedPlayerCount = uiState.selectedPlayerCount,
                             onSelectPlayerCount = viewModel::selectPlayerCount,
                             selectedGridSize = uiState.selectedGridSize,
+                            mutationsEnabled = uiState.mutationsEnabled,
+                            onSelectMutationsEnabled = viewModel::selectMutationsEnabled,
                             selectedCpuDifficulty = uiState.selectedCpuDifficulty,
                             selectedTimerMode = uiState.selectedTimerMode,
                             onSelectGridSize = viewModel::selectGridSize,
@@ -1737,6 +2079,8 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             soundEnabled = uiState.soundEnabled,
                             hapticsEnabled = uiState.hapticsEnabled,
                             performanceMode = uiState.performanceMode,
+                            isRankedMatch = uiState.isRankedMatch,
+                            lastRpChange = uiState.lastRpChange,
                             activeCampaignLevel = uiState.activeCampaignLevel,
                             justUnlockedNextCampaignLevel = uiState.justUnlockedNextCampaignLevel,
                             selectedGridSize = uiState.selectedGridSize,
@@ -1776,9 +2120,11 @@ fun NeonGridProtocolApp(viewModel: GameViewModel = viewModel()) {
                             soundVolume = uiState.soundVolume,
                             hapticsEnabled = uiState.hapticsEnabled,
                             performanceMode = uiState.performanceMode,
+                            selectedTheme = uiState.selectedTheme,
                             onSoundVolumeChange = viewModel::setSoundVolume,
                             onHapticsEnabledChange = viewModel::setHapticsEnabled,
                             onPerformanceModeChange = viewModel::setPerformanceMode,
+                            onSelectTheme = viewModel::setSelectedTheme,
                             onReplayTutorial = viewModel::replayTutorial,
                             onWipeSaveData = viewModel::clearPersistentData,
                             onOpenCredits = viewModel::openCreditsScreen,
@@ -1796,17 +2142,16 @@ fun CommandCenterScreen(
     performanceMode: Boolean = false,
     unlockedAchievements: Set<String> = emptySet(),
     nodesCaptured: Int = 0,
-    unlockedCampaignLevel: Int = 1,
-    selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
+    rankPoints: Int = 0,
+    currentDivision: RankedDivision = RankedDivision.fromRp(rankPoints),
     sessionStats: Map<Int, PlayerSessionStats> = emptyMap(),
     matchHistory: List<MatchHistoryItem> = emptyList(),
-    onResumeCampaign: () -> Unit = {},
+    onStartRankedMatch: () -> Unit = {},
     onOpenQuickMatch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
-    onSelectCampaignLevel: (CampaignLevel) -> Unit = {},
-    onStartCampaignLevel: (CampaignLevel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalGamePalette.current
     val scrollState = rememberScrollState()
     val infiniteTransition = rememberInfiniteTransition(label = "commandCenterTransition")
     val headerGlow by infiniteTransition.animateFloat(
@@ -1855,7 +2200,7 @@ fun CommandCenterScreen(
                     val offsetY = sin(phaseAngle * dot.speedY) * (height * 0.045f)
                     val centerX = ((dot.xFraction * width + offsetX) % width + width) % width
                     val centerY = ((dot.yFraction * height + offsetY) % height + height) % height
-                    val dotColor = if (dot.isCyan) ProtocolCyan else ProtocolMagenta
+                    val dotColor = if (dot.isCyan) palette.p1Accent else ProtocolMagenta
                     val radiusPx = dot.radiusDp.dp.toPx()
 
                     drawCircle(color = dotColor.copy(alpha = dot.baseAlpha * 0.4f), radius = radiusPx * 2.5f, center = Offset(centerX, centerY))
@@ -1876,23 +2221,38 @@ fun CommandCenterScreen(
 
             CommandCenterStatsRow(
                 nodesCaptured = nodesCaptured,
-                unlockedCampaignLevel = unlockedCampaignLevel,
-                totalCampaignLevels = CampaignLevel.entries.size
+                rankPoints = rankPoints,
+                currentDivision = currentDivision
             )
 
-            CommandCenterActionButtons(
-                unlockedCampaignLevel = unlockedCampaignLevel,
+            RankedCircuitCard(
+                rankPoints = rankPoints,
+                division = currentDivision,
                 glowAlpha = headerGlow,
-                onResumeCampaignClick = onResumeCampaign,
-                onQuickMatchClick = onOpenQuickMatch
+                onFindRankedMatch = onStartRankedMatch
             )
 
-            CampaignStageSelectorCard(
-                unlockedCampaignLevel = unlockedCampaignLevel,
-                selectedCampaignLevel = selectedCampaignLevel,
-                onSelectCampaignLevel = onSelectCampaignLevel,
-                onStartCampaignLevel = onStartCampaignLevel
-            )
+            Button(
+                onClick = onOpenQuickMatch,
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ProtocolMagenta, contentColor = Color.White),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(68.dp)
+                    .shadow(elevation = 16.dp, shape = RoundedCornerShape(18.dp), spotColor = ProtocolMagenta.copy(alpha = headerGlow))
+                    .border(width = 2.dp, color = ProtocolMagenta, shape = RoundedCornerShape(18.dp))
+                    .testTag("quick_match_button")
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(imageVector = Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(text = "Quick Match", style = MaterialTheme.typography.titleSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, fontSize = 14.sp), textAlign = TextAlign.Center)
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(text = "Custom Grid • Difficulty • Multiplayer • Timers", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontSize = 10.sp), color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+                }
+            }
 
             DashboardAchievementsCard(unlockedIds = unlockedAchievements)
 
@@ -1910,6 +2270,7 @@ private fun CommandCenterHeader(
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalGamePalette.current
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -1917,7 +2278,7 @@ private fun CommandCenterHeader(
             .background(ProtocolCardSurface)
             .border(
                 width = 1.5.dp,
-                brush = Brush.linearGradient(colors = listOf(ProtocolCyan.copy(alpha = glowAlpha), ProtocolMagenta.copy(alpha = glowAlpha))),
+                brush = Brush.linearGradient(colors = listOf(palette.p1Accent.copy(alpha = glowAlpha), ProtocolMagenta.copy(alpha = glowAlpha))),
                 shape = RoundedCornerShape(22.dp)
             )
             .padding(horizontal = 16.dp, vertical = 16.dp)
@@ -1936,14 +2297,14 @@ private fun CommandCenterHeader(
                     fontWeight = FontWeight.Black,
                     fontSize = 25.sp,
                     letterSpacing = 2.0.sp,
-                    shadow = Shadow(color = ProtocolCyan.copy(alpha = glowAlpha), offset = Offset.Zero, blurRadius = 28f)
+                    shadow = Shadow(color = palette.p1Accent.copy(alpha = glowAlpha), offset = Offset.Zero, blurRadius = 28f)
                 ),
                 color = ProtocolTextPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.testTag("neon_protocol_title")
             )
             Text(
-                text = "THE COMMAND CENTER",
+                text = "THE COMMAND CENTER • NEON LEAGUE",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Bold,
@@ -1962,13 +2323,13 @@ private fun CommandCenterHeader(
                 .size(48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(ProtocolElevatedSurface)
-                .border(1.dp, ProtocolCyan.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+                .border(1.dp, palette.p1Accent.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
                 .testTag("open_settings_button")
         ) {
             Icon(
                 imageVector = Icons.Filled.Settings,
                 contentDescription = "Settings",
-                tint = ProtocolCyan,
+                tint = palette.p1Accent,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -1976,178 +2337,210 @@ private fun CommandCenterHeader(
 }
 
 @Composable
-private fun CommandCenterStatsRow(nodesCaptured: Int, unlockedCampaignLevel: Int, totalCampaignLevels: Int, modifier: Modifier = Modifier) {
+private fun CommandCenterStatsRow(
+    nodesCaptured: Int,
+    rankPoints: Int,
+    currentDivision: RankedDivision,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalGamePalette.current
     Row(modifier = modifier.fillMaxWidth().testTag("player_stats_header_row"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(
             modifier = Modifier
                 .weight(1f)
-                .shadow(elevation = 10.dp, shape = RoundedCornerShape(16.dp), spotColor = ProtocolCyan.copy(alpha = 0.45f))
+                .shadow(elevation = 10.dp, shape = RoundedCornerShape(16.dp), spotColor = palette.p1Accent.copy(alpha = 0.45f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(ProtocolCardSurface)
-                .border(1.5.dp, ProtocolCyan, RoundedCornerShape(16.dp))
+                .border(1.5.dp, palette.p1Accent, RoundedCornerShape(16.dp))
                 .padding(horizontal = 12.dp, vertical = 12.dp)
                 .testTag("nodes_captured_stat"),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Icon(imageVector = Icons.Filled.GridView, contentDescription = null, tint = ProtocolCyan, modifier = Modifier.size(15.dp))
+                Icon(imageVector = Icons.Filled.GridView, contentDescription = null, tint = palette.p1Accent, modifier = Modifier.size(15.dp))
                 Text(text = "Nodes Captured", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp), color = ProtocolTextPrimary, textAlign = TextAlign.Center)
             }
-            Text(text = nodesCaptured.toString(), style = MaterialTheme.typography.titleLarge.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, shadow = Shadow(color = ProtocolCyan, offset = Offset.Zero, blurRadius = 14f)), color = ProtocolCyan, modifier = Modifier.testTag("nodes_captured_value"))
+            Text(text = nodesCaptured.toString(), style = MaterialTheme.typography.titleLarge.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, shadow = Shadow(color = palette.p1Accent, offset = Offset.Zero, blurRadius = 14f)), color = palette.p1Accent, modifier = Modifier.testTag("nodes_captured_value"))
         }
 
         Column(
             modifier = Modifier
                 .weight(1f)
-                .shadow(elevation = 10.dp, shape = RoundedCornerShape(16.dp), spotColor = ProtocolMagenta.copy(alpha = 0.45f))
+                .shadow(elevation = 10.dp, shape = RoundedCornerShape(16.dp), spotColor = currentDivision.color.copy(alpha = 0.45f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(ProtocolCardSurface)
-                .border(1.5.dp, ProtocolMagenta, RoundedCornerShape(16.dp))
+                .border(1.5.dp, currentDivision.color, RoundedCornerShape(16.dp))
                 .padding(horizontal = 12.dp, vertical = 12.dp)
-                .testTag("campaign_level_reached_stat"),
+                .testTag("ranked_rp_stat"),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Icon(imageVector = Icons.Filled.EmojiEvents, contentDescription = null, tint = ProtocolMagenta, modifier = Modifier.size(15.dp))
-                Text(text = "Campaign Stage", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp), color = ProtocolTextPrimary, textAlign = TextAlign.Center)
+                Icon(imageVector = Icons.Filled.EmojiEvents, contentDescription = null, tint = currentDivision.color, modifier = Modifier.size(15.dp))
+                Text(text = "League Rating", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp), color = ProtocolTextPrimary, textAlign = TextAlign.Center)
             }
-            Text(text = "Lvl $unlockedCampaignLevel / $totalCampaignLevels", style = MaterialTheme.typography.titleLarge.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, shadow = Shadow(color = ProtocolMagenta, offset = Offset.Zero, blurRadius = 14f)), color = ProtocolMagenta, modifier = Modifier.testTag("campaign_level_reached_value"))
+            Text(text = "$rankPoints RP", style = MaterialTheme.typography.titleLarge.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, shadow = Shadow(color = currentDivision.color, offset = Offset.Zero, blurRadius = 14f)), color = currentDivision.color, modifier = Modifier.testTag("ranked_rp_value"))
         }
     }
 }
 
 @Composable
-private fun CommandCenterActionButtons(unlockedCampaignLevel: Int, glowAlpha: Float, onResumeCampaignClick: () -> Unit, onQuickMatchClick: () -> Unit, modifier: Modifier = Modifier) {
-    val currentLevel = CampaignLevel.fromNumber(unlockedCampaignLevel)
-    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(
-            onClick = onResumeCampaignClick,
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ProtocolCyan, contentColor = Color.Black),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
-            modifier = Modifier
-                .weight(1f)
-                .height(84.dp)
-                .shadow(elevation = 16.dp, shape = RoundedCornerShape(18.dp), spotColor = ProtocolCyan.copy(alpha = glowAlpha))
-                .border(width = 2.dp, color = ProtocolCyan, shape = RoundedCornerShape(18.dp))
-                .testTag("resume_campaign_button")
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(imageVector = Icons.Filled.EmojiEvents, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(text = "Resume Campaign", style = MaterialTheme.typography.titleSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, fontSize = 13.sp), textAlign = TextAlign.Center)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Lvl ${currentLevel.levelNumber} • ${currentLevel.gridSize.label} ${currentLevel.difficulty.label}", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontSize = 10.sp), color = Color.Black.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-            }
-        }
+fun RankedCircuitCard(
+    rankPoints: Int,
+    division: RankedDivision,
+    glowAlpha: Float = 0.85f,
+    onFindRankedMatch: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalGamePalette.current
+    val nextDivision = division.nextDivision()
+    val progress = division.progressToNext(rankPoints)
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
+        label = "rankedProgressAnim"
+    )
+    val timerRuleText = if (division.timerMode.isTimed) "${division.timerMode.durationSeconds}s Timer" else "Relaxed Timer"
 
-        Button(
-            onClick = onQuickMatchClick,
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ProtocolMagenta, contentColor = Color.White),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
-            modifier = Modifier
-                .weight(1f)
-                .height(84.dp)
-                .shadow(elevation = 16.dp, shape = RoundedCornerShape(18.dp), spotColor = ProtocolMagenta.copy(alpha = glowAlpha))
-                .border(width = 2.dp, color = ProtocolMagenta, shape = RoundedCornerShape(18.dp))
-                .testTag("quick_match_button")
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(imageVector = Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(text = "Quick Match", style = MaterialTheme.typography.titleSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, fontSize = 13.sp), textAlign = TextAlign.Center)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Configure Arena & Timers", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontSize = 10.sp), color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
-            }
-        }
-    }
-}
-
-@Composable
-fun CampaignStageSelectorCard(unlockedCampaignLevel: Int = 1, selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1, onSelectCampaignLevel: (CampaignLevel) -> Unit = {}, onStartCampaignLevel: (CampaignLevel) -> Unit = {}, modifier: Modifier = Modifier) {
     Card(
-        modifier = modifier.fillMaxWidth().border(1.5.dp, ProtocolCyan.copy(alpha = 0.6f), RoundedCornerShape(22.dp)).testTag("campaign_protocol_section"),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(elevation = 18.dp, shape = RoundedCornerShape(22.dp), spotColor = division.color.copy(alpha = glowAlpha * 0.55f))
+            .border(width = 2.dp, color = division.color.copy(alpha = 0.85f), shape = RoundedCornerShape(22.dp))
+            .testTag("ranked_circuit_card"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = "CAMPAIGN PROTOCOL (6 STAGES)", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = ProtocolCyan)
-                Text(text = "Unlocked: $unlockedCampaignLevel / ${CampaignLevel.entries.size}", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = ProtocolAmber, modifier = Modifier.testTag("campaign_unlocked_progress_text"))
-            }
-
-            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CampaignLevel.entries.forEach { level ->
-                    val isUnlocked = level.levelNumber <= unlockedCampaignLevel
-                    val isCleared = level.levelNumber < unlockedCampaignLevel
-                    val isSelected = selectedCampaignLevel == level && isUnlocked
-                    val diffColor = when (level.difficulty) {
-                        CpuDifficulty.EASY -> ProtocolLime
-                        CpuDifficulty.MEDIUM -> ProtocolAmber
-                        CpuDifficulty.HARD -> ProtocolMagenta
-                    }
-
-                    Row(
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .alpha(if (isUnlocked) 1f else 0.45f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(if (isSelected) ProtocolCyan.copy(alpha = 0.14f) else ProtocolElevatedSurface)
-                            .border(width = if (isSelected) 2.dp else 1.dp, color = when { isSelected -> ProtocolCyan; isCleared -> ProtocolLime.copy(alpha = 0.7f); else -> ProtocolBorder }, shape = RoundedCornerShape(14.dp))
-                            .clickable(enabled = isUnlocked) { onSelectCampaignLevel(level) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                            .testTag("campaign_level_${level.levelNumber}_card"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(division.color.copy(alpha = 0.18f))
+                            .border(2.dp, division.color, CircleShape)
+                            .testTag("ranked_division_icon"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isUnlocked) ProtocolDarkBackground else ProtocolBorder.copy(alpha = 0.4f))
-                                    .border(1.5.dp, if (isUnlocked) ProtocolCyan else ProtocolBorder, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (!isUnlocked) {
-                                    Icon(imageVector = Icons.Filled.Lock, contentDescription = "LOCKED", tint = ProtocolTextMuted, modifier = Modifier.size(16.dp))
-                                } else if (isCleared) {
-                                    Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = "Cleared", tint = ProtocolLime, modifier = Modifier.size(18.dp))
-                                } else {
-                                    Text(text = level.levelNumber.toString(), style = MaterialTheme.typography.labelLarge.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = ProtocolCyan)
-                                }
-                            }
-                            Column {
-                                Text(text = level.title, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = if (isUnlocked) ProtocolTextPrimary else ProtocolTextMuted)
-                                Text(text = "${level.gridSize.label} Grid • ${level.difficulty.label} AI", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily), color = if (isUnlocked) diffColor else ProtocolTextMuted)
-                            }
-                        }
-
-                        if (isUnlocked) {
-                            Button(
-                                onClick = { onStartCampaignLevel(level) },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = ProtocolCyan, contentColor = Color.Black),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                                modifier = Modifier.height(36.dp).testTag("campaign_level_${level.levelNumber}")
-                            ) {
-                                Text(text = "Deploy", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold))
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(ProtocolDarkBackground).border(1.dp, ProtocolBorder, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 6.dp).testTag("campaign_level_${level.levelNumber}"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = "LOCKED", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = ProtocolTextMuted)
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Filled.EmojiEvents,
+                            contentDescription = division.title,
+                            tint = division.color,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "RANKED CIRCUIT • NEON LEAGUE",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.1.sp
+                            ),
+                            color = ProtocolTextMuted
+                        )
+                        Text(
+                            text = division.title.uppercase(Locale.US),
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Black,
+                                shadow = Shadow(color = division.color.copy(alpha = 0.7f), offset = Offset.Zero, blurRadius = 14f)
+                            ),
+                            color = division.color,
+                            modifier = Modifier.testTag("ranked_division_title")
+                        )
                     }
                 }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "$rankPoints RP",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = ProtocolTextPrimary,
+                        modifier = Modifier.testTag("ranked_card_rp_text")
+                    )
+                    Text(
+                        text = "+25 W / -15 L",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontSize = 10.sp),
+                        color = ProtocolTextMuted
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${division.gridSize.label} Grid • ${division.difficulty.label} AI • $timerRuleText",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = palette.p1Accent
+                    )
+                    Text(
+                        text = if (nextDivision != null) {
+                            "${(nextDivision.minRp - rankPoints).coerceAtLeast(0)} RP to ${nextDivision.title}"
+                        } else {
+                            "MAX TIER (400+ RP)"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontSize = 10.sp),
+                        color = division.color
+                    )
+                }
+
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    color = division.color,
+                    trackColor = ProtocolElevatedSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .testTag("ranked_division_progress_bar")
+                )
+            }
+
+            Button(
+                onClick = onFindRankedMatch,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.p1Accent,
+                    contentColor = Color.Black
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .shadow(elevation = 12.dp, shape = RoundedCornerShape(14.dp), spotColor = palette.p1Accent.copy(alpha = glowAlpha))
+                    .testTag("find_ranked_match_button")
+            ) {
+                Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Find Ranked Match",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Black
+                    )
+                )
             }
         }
     }
@@ -2155,29 +2548,41 @@ fun CampaignStageSelectorCard(unlockedCampaignLevel: Int = 1, selectedCampaignLe
 
 @Composable
 fun DashboardAchievementsCard(unlockedIds: Set<String>, modifier: Modifier = Modifier) {
+    val palette = LocalGamePalette.current
     Card(
         modifier = modifier.fillMaxWidth().border(1.dp, ProtocolBorder, RoundedCornerShape(18.dp)).testTag("dashboard_achievements_card"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(imageVector = Icons.Filled.AutoAwesome, contentDescription = null, tint = ProtocolCyan, modifier = Modifier.size(16.dp))
-                Text(text = "ACHIEVEMENT PROTOCOLS", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = ProtocolCyan)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(imageVector = Icons.Filled.AutoAwesome, contentDescription = null, tint = palette.p1Accent, modifier = Modifier.size(16.dp))
+                    Text(text = "TROPHY ROOM (12 ACHIEVEMENTS)", style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = palette.p1Accent)
+                }
+                Text(
+                    text = "${unlockedIds.size} / ${AchievementProtocol.entries.size}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold),
+                    color = ProtocolAmber
+                )
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AchievementProtocol.entries.forEach { ach ->
                     val isUnlocked = unlockedIds.contains(ach.id)
-                    val accent = if (isUnlocked) ProtocolCyan else ProtocolTextMuted
-                    val bgColor = if (isUnlocked) ProtocolCyan.copy(alpha = 0.1f) else ProtocolElevatedSurface
+                    val accent = if (isUnlocked) palette.p1Accent else ProtocolTextMuted
+                    val bgColor = if (isUnlocked) palette.p1Accent.copy(alpha = 0.1f) else ProtocolElevatedSurface
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(bgColor)
-                            .border(1.dp, if (isUnlocked) ProtocolCyan.copy(alpha = 0.5f) else ProtocolBorder, RoundedCornerShape(10.dp))
+                            .border(1.dp, if (isUnlocked) palette.p1Accent.copy(alpha = 0.5f) else ProtocolBorder, RoundedCornerShape(10.dp))
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -2198,7 +2603,10 @@ fun DashboardAchievementsCard(unlockedIds: Set<String>, modifier: Modifier = Mod
 fun QuickMatchConfigScreen(
     performanceMode: Boolean = false,
     selectedPlayerCount: Int, onSelectPlayerCount: (Int) -> Unit,
-    selectedGridSize: GridSize, selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
+    selectedGridSize: GridSize,
+    mutationsEnabled: Boolean = false,
+    onSelectMutationsEnabled: (Boolean) -> Unit = {},
+    selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
     onSelectGridSize: (GridSize) -> Unit, onSelectCpuDifficulty: (CpuDifficulty) -> Unit, onSelectTimerMode: (TimerMode) -> Unit,
     onStartMatch: () -> Unit, onBackToCommandCenter: () -> Unit, modifier: Modifier = Modifier
 ) {
@@ -2240,7 +2648,7 @@ fun QuickMatchConfigScreen(
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(text = "PROTOCOL PARAMETERS", style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black), color = ProtocolTextPrimary)
-                        Text(text = "Select Player Mode, Grid Size, CPU Difficulty, and Time Limit.", style = MaterialTheme.typography.bodyMedium, color = ProtocolTextMuted)
+                        Text(text = "Select Player Mode, Grid Size, Grid Mutations, CPU Difficulty, and Time Limit.", style = MaterialTheme.typography.bodyMedium, color = ProtocolTextMuted)
                     }
                     
                     // 0. PLAYERS SECTION
@@ -2309,6 +2717,53 @@ fun QuickMatchConfigScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(text = sizeOption.label, style = MaterialTheme.typography.labelLarge, color = if (isSelected) Color.Black else ProtocolTextPrimary)
+                                }
+                            }
+                        }
+                    }
+
+                    // 1.5 GRID MUTATIONS TOGGLE (Standard vs Mutated)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "GRID MUTATIONS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = ThemeColor.SOLAR_FLARE.primary)
+                            Text(
+                                text = if (mutationsEnabled) "Blocked Maze Edges + Golden Nodes (+2)" else "Classic Pure Grid",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = ProtocolTextMuted
+                            )
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val options = listOf(false to "Standard", true to "Mutated")
+                            options.forEach { (isMutatedOption, label) ->
+                                val isSelected = mutationsEnabled == isMutatedOption
+                                val optionAccent = if (isMutatedOption) ThemeColor.SOLAR_FLARE.primary else ProtocolCyan
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) optionAccent else ProtocolElevatedSurface)
+                                        .border(width = if (isSelected) 2.dp else 1.dp, color = if (isSelected) optionAccent else ProtocolBorder, shape = RoundedCornerShape(12.dp))
+                                        .clickable { onSelectMutationsEnabled(isMutatedOption) }
+                                        .testTag("mutations_${label.lowercase(Locale.US)}_button"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (isMutatedOption) {
+                                            Icon(
+                                                imageVector = Icons.Filled.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = if (isSelected) Color.Black else ThemeColor.SOLAR_FLARE.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (isSelected) Color.Black else ProtocolTextPrimary
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2530,9 +2985,11 @@ fun SettingsScreen(
     soundVolume: Float,
     hapticsEnabled: Boolean,
     performanceMode: Boolean,
+    selectedTheme: ThemeColor = ThemeColor.CYBER_CYAN,
     onSoundVolumeChange: (Float) -> Unit,
     onHapticsEnabledChange: (Boolean) -> Unit,
     onPerformanceModeChange: (Boolean) -> Unit,
+    onSelectTheme: (ThemeColor) -> Unit = {},
     onReplayTutorial: () -> Unit,
     onWipeSaveData: () -> Unit,
     onOpenCredits: () -> Unit = {},
@@ -2585,7 +3042,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontWeight = FontWeight.Black,
-                        color = ProtocolCyan
+                        color = palette.p1Accent
                     )
                 )
             }
@@ -2593,7 +3050,7 @@ fun SettingsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.5.dp, ProtocolCyan.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                    .border(1.5.dp, palette.p1Accent.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
                     .testTag("settings_card"),
                 shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
@@ -2602,6 +3059,93 @@ fun SettingsScreen(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    // 0. NEON THEME: 4 Circular Color Swatches
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(ProtocolElevatedSurface)
+                            .border(1.dp, palette.p1Accent.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .testTag("settings_neon_theme_section"),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "NEON THEME",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = palette.p1Accent
+                            )
+                            Text(
+                                text = selectedTheme.label,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = selectedTheme.primary
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ThemeColor.entries.forEach { themeOption ->
+                                val isSelected = selectedTheme == themeOption
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .shadow(
+                                                elevation = if (isSelected) 12.dp else 2.dp,
+                                                shape = CircleShape,
+                                                spotColor = themeOption.primary
+                                            )
+                                            .clip(CircleShape)
+                                            .background(themeOption.primary)
+                                            .border(
+                                                width = if (isSelected) 3.dp else 1.5.dp,
+                                                color = if (isSelected) Color.White else ProtocolDarkBackground,
+                                                shape = CircleShape
+                                            )
+                                            .clickable { onSelectTheme(themeOption) }
+                                            .testTag("theme_swatch_${themeOption.name.lowercase()}"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Filled.CheckCircle,
+                                                contentDescription = "${themeOption.label} Selected",
+                                                tint = Color.Black,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = themeOption.label.substringBefore(" "),
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 10.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        ),
+                                        color = if (isSelected) themeOption.primary else ProtocolTextMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // 1. AUDIO: Continuous Volume Slider (0f..1f)
                     Column(
                         modifier = Modifier
@@ -2624,7 +3168,7 @@ fun SettingsScreen(
                                 Icon(
                                     imageVector = if (soundVolume > 0.001f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
                                     contentDescription = null,
-                                    tint = ProtocolCyan,
+                                    tint = palette.p1Accent,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Column {
@@ -2649,7 +3193,7 @@ fun SettingsScreen(
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontWeight = FontWeight.Black
                                 ),
-                                color = ProtocolCyan,
+                                color = palette.p1Accent,
                                 modifier = Modifier.testTag("settings_volume_percentage")
                             )
                         }
@@ -2659,8 +3203,8 @@ fun SettingsScreen(
                             onValueChange = onSoundVolumeChange,
                             valueRange = 0f..1f,
                             colors = SliderDefaults.colors(
-                                thumbColor = ProtocolCyan,
-                                activeTrackColor = ProtocolCyan,
+                                thumbColor = palette.p1Accent,
+                                activeTrackColor = palette.p1Accent,
                                 inactiveTrackColor = ProtocolDarkBackground
                             ),
                             modifier = Modifier
@@ -2677,7 +3221,7 @@ fun SettingsScreen(
                             .background(ProtocolElevatedSurface)
                             .border(
                                 width = 1.dp,
-                                color = if (hapticsEnabled) ProtocolCyan.copy(alpha = 0.6f) else ProtocolBorder,
+                                color = if (hapticsEnabled) palette.p1Accent.copy(alpha = 0.6f) else ProtocolBorder,
                                 shape = RoundedCornerShape(14.dp)
                             )
                             .clickable { onHapticsEnabledChange(!hapticsEnabled) }
@@ -2694,7 +3238,7 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Filled.Vibration,
                                 contentDescription = null,
-                                tint = if (hapticsEnabled) ProtocolCyan else ProtocolTextMuted,
+                                tint = if (hapticsEnabled) palette.p1Accent else ProtocolTextMuted,
                                 modifier = Modifier.size(22.dp)
                             )
                             Column {
@@ -2718,7 +3262,7 @@ fun SettingsScreen(
                             onCheckedChange = onHapticsEnabledChange,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.Black,
-                                checkedTrackColor = ProtocolCyan,
+                                checkedTrackColor = palette.p1Accent,
                                 uncheckedThumbColor = ProtocolTextMuted,
                                 uncheckedTrackColor = ProtocolDarkBackground
                             ),
@@ -2798,7 +3342,7 @@ fun SettingsScreen(
                             onClick = onReplayTutorial,
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = ProtocolCyan,
+                                containerColor = palette.p1Accent,
                                 contentColor = Color.Black
                             ),
                             modifier = Modifier
@@ -2852,7 +3396,7 @@ fun SettingsScreen(
                                 .height(48.dp)
                                 .testTag("settings_open_credits_button")
                         ) {
-                            Icon(imageVector = Icons.Filled.Code, contentDescription = null, tint = ProtocolCyan, modifier = Modifier.size(18.dp))
+                            Icon(imageVector = Icons.Filled.Code, contentDescription = null, tint = palette.p1Accent, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "System Credits",
@@ -2865,11 +3409,11 @@ fun SettingsScreen(
                     OutlinedButton(
                         onClick = onBackToCommandCenter,
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ProtocolCyan),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.p1Accent),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
-                            .border(1.5.dp, ProtocolCyan, RoundedCornerShape(14.dp))
+                            .border(1.5.dp, palette.p1Accent, RoundedCornerShape(14.dp))
                             .testTag("settings_back_to_command_center_button")
                     ) {
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -2887,7 +3431,7 @@ fun SettingsScreen(
 
             // 6. Version Label at the very bottom
             Text(
-                text = "v2.0.0 - Neon Overdrive",
+                text = "v3.0.0 - Neon League",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontFamily = JetBrainsMonoFontFamily,
                     letterSpacing = 1.2.sp
@@ -2926,7 +3470,7 @@ fun CreditsScreen(performanceMode: Boolean = false, onBack: () -> Unit, modifier
                         Icon(imageVector = Icons.Filled.AutoAwesome, contentDescription = null, tint = palette.p1Accent, modifier = Modifier.size(32.dp))
                     }
                     Text(text = "SYSTEM CREDITS", style = MaterialTheme.typography.headlineMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Black, letterSpacing = 2.sp, shadow = Shadow(color = palette.p1Accent, offset = Offset.Zero, blurRadius = 20f)), color = palette.primaryText, textAlign = TextAlign.Center)
-                    CreditSectionCard(icon = Icons.Filled.Code, text = "Design & Development: [Your Name/Handle]", accentColor = palette.p1Accent, testTag = "credits_design_dev_text")
+                    CreditSectionCard(icon = Icons.Filled.Code, text = "Design & Development: Muzammil S. Dagosh", accentColor = palette.p1Accent, testTag = "credits_design_dev_text")
                     CreditSectionCard(icon = Icons.Filled.Memory, text = "AI Co-Pilot & Logic: Gemini", accentColor = palette.p2Accent, testTag = "credits_ai_copilot_text")
                     CreditSectionCard(icon = Icons.Filled.AutoAwesome, text = "Framework: Kotlin & Jetpack Compose via Google AI Studio", accentColor = palette.p3Accent, testTag = "credits_framework_text")
                     CreditSectionCard(icon = Icons.Filled.CloudDone, text = "Build Pipeline: Cloud CI/CD Assembly", accentColor = palette.streakAccent, testTag = "credits_build_pipeline_text")
@@ -2945,7 +3489,7 @@ fun CreditsScreen(performanceMode: Boolean = false, onBack: () -> Unit, modifier
                     }
 
                     Text(
-                        text = "v2.0.0 - Neon Overdrive",
+                        text = "v3.0.0 - Neon League",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMonoFontFamily,
                             letterSpacing = 1.2.sp
@@ -2977,7 +3521,9 @@ private fun CreditSectionCard(icon: ImageVector, text: String, accentColor: Colo
 fun GridArenaScreen(
     hasSeenTutorial: Boolean = false,
     onCompleteTutorial: () -> Unit = {},
-    soundEnabled: Boolean, hapticsEnabled: Boolean, performanceMode: Boolean = false, activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
+    soundEnabled: Boolean, hapticsEnabled: Boolean, performanceMode: Boolean = false,
+    isRankedMatch: Boolean = false, lastRpChange: Int? = null,
+    activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
     selectedGridSize: GridSize, selectedCpuDifficulty: CpuDifficulty, selectedTimerMode: TimerMode,
     blitzRemainingSeconds: Float, blitzRemainingFraction: Float, lastTurnForfeitedByTimeout: Boolean,
     boardState: BoardState, hoveredEdge: EdgeCoordinate?, boardZoom: Float, lastHapticEvent: HapticEvent?, victoryAnimationTriggerId: Int,
@@ -3264,6 +3810,7 @@ fun GridArenaScreen(
             FullScreenVictoryAnimationOverlay(
                 boardState = boardState, triggerId = victoryAnimationTriggerId,
                 performanceMode = performanceMode,
+                isRankedMatch = isRankedMatch, lastRpChange = lastRpChange,
                 activeCampaignLevel = activeCampaignLevel, justUnlockedNextCampaignLevel = justUnlockedNextCampaignLevel,
                 onAdvanceToNextCampaignLevel = onAdvanceToNextCampaignLevel, onPlayAgain = onRestartMatch, onReturnToSetup = onReturnToCommandCenter
             )
@@ -3552,8 +4099,10 @@ private fun DotsAndBoxesGrid(
                     if (dotCol < boardState.boxCols) {
                         val edgeCoord = EdgeCoordinate(orientation = EdgeOrientation.HORIZONTAL, row = dotRow, col = dotCol)
                         val claimedBy = boardState.horizontalEdges[dotRow][dotCol]
+                        val isBlocked = boardState.blockedEdges.contains(edgeCoord)
                         HorizontalEdgeCell(
-                            edge = edgeCoord, claimedBy = claimedBy, isLastClaimed = boardState.lastClaimedEdge == edgeCoord,
+                            edge = edgeCoord, claimedBy = claimedBy, isBlocked = isBlocked,
+                            isLastClaimed = boardState.lastClaimedEdge == edgeCoord,
                             isHoveredExternal = hoveredEdge == edgeCoord, neonGlowPulse = neonGlowPulse, activePlayerColor = activePlayerColor,
                             width = boxSize, slotHeight = (dotSlotSize * 1.4f).coerceAtLeast(18.dp), onHover = onEdgeHover, onClick = { onEdgeClick(edgeCoord) }
                         )
@@ -3565,18 +4114,22 @@ private fun DotsAndBoxesGrid(
                     for (dotCol in 0 until boardState.dotCols) {
                         val vEdgeCoord = EdgeCoordinate(orientation = EdgeOrientation.VERTICAL, row = dotRow, col = dotCol)
                         val claimedBy = boardState.verticalEdges[dotRow][dotCol]
+                        val isBlocked = boardState.blockedEdges.contains(vEdgeCoord)
                         VerticalEdgeCell(
-                            edge = vEdgeCoord, claimedBy = claimedBy, isLastClaimed = boardState.lastClaimedEdge == vEdgeCoord,
+                            edge = vEdgeCoord, claimedBy = claimedBy, isBlocked = isBlocked,
+                            isLastClaimed = boardState.lastClaimedEdge == vEdgeCoord,
                             isHoveredExternal = hoveredEdge == vEdgeCoord, neonGlowPulse = neonGlowPulse, activePlayerColor = activePlayerColor,
                             slotWidth = dotSlotSize, height = boxSize, onHover = onEdgeHover, onClick = { onEdgeClick(vEdgeCoord) }
                         )
                         if (dotCol < boardState.boxCols) {
                             val boxOwner = boardState.boxes[dotRow][dotCol]
                             val boxCoord = BoxCoordinate(dotRow, dotCol)
+                            val isGoldenNode = boardState.goldenNodes.contains(boxCoord)
                             val isNewlyCaptured = boardState.lastCapturedBoxes.contains(boxCoord)
                             val isInComboChain = boardState.isMultiSquareCombo && boardState.comboChainBoxes.contains(boxCoord)
                             PlayableBoxCell(
-                                row = dotRow, col = dotCol, owner = boxOwner, isNewlyCaptured = isNewlyCaptured,
+                                row = dotRow, col = dotCol, owner = boxOwner, isGoldenNode = isGoldenNode,
+                                neonGlowPulse = neonGlowPulse, isNewlyCaptured = isNewlyCaptured,
                                 isInComboChain = isInComboChain, comboPulseFraction = if (isNewlyCaptured || isInComboChain) comboPulseFraction else 0f,
                                 performanceMode = performanceMode, size = boxSize
                             )
@@ -3598,7 +4151,7 @@ private fun DotNode(slotSize: Dp) {
 
 @Composable
 private fun HorizontalEdgeCell(
-    edge: EdgeCoordinate, claimedBy: Int, isLastClaimed: Boolean, isHoveredExternal: Boolean,
+    edge: EdgeCoordinate, claimedBy: Int, isBlocked: Boolean = false, isLastClaimed: Boolean, isHoveredExternal: Boolean,
     neonGlowPulse: Float, activePlayerColor: Color, width: Dp, slotHeight: Dp,
     onHover: (EdgeCoordinate?) -> Unit, onClick: () -> Unit
 ) {
@@ -3607,8 +4160,8 @@ private fun HorizontalEdgeCell(
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    val showHover = claimedBy == 0 && (isHovered || isPressed || isHoveredExternal)
-    LaunchedEffect(isHovered, isPressed) { if (isHovered || isPressed) onHover(edge) }
+    val showHover = !isBlocked && claimedBy == 0 && (isHovered || isPressed || isHoveredExternal)
+    LaunchedEffect(isHovered, isPressed, isBlocked) { if (!isBlocked && (isHovered || isPressed)) onHover(edge) }
 
     val ownerColor = if (claimedBy != 0) playerAccentColor(claimedBy) else Color.Transparent
     val trackColor by animateColorAsState(targetValue = if (showHover) activePlayerColor.copy(alpha = 0.65f) else palette.idleEdge, animationSpec = tween(durationMillis = 180), label = "hEdgeTrackColor")
@@ -3616,16 +4169,41 @@ private fun HorizontalEdgeCell(
     val barThickness = 6.dp
 
     Box(
-        modifier = Modifier.width(width).height(slotHeight).hoverable(interactionSource = interactionSource).then(if (claimedBy == 0) Modifier.clickable(interactionSource = interactionSource, indication = null, onClick = onClick) else Modifier).semantics { contentDescription = "Horizontal line row ${edge.row} column ${edge.col}" }.testTag("h_edge_${edge.row}_${edge.col}"),
+        modifier = Modifier
+            .width(width)
+            .height(slotHeight)
+            .then(
+                if (!isBlocked) {
+                    Modifier
+                        .hoverable(interactionSource = interactionSource)
+                        .then(if (claimedBy == 0) Modifier.clickable(interactionSource = interactionSource, indication = null, onClick = onClick) else Modifier)
+                } else {
+                    Modifier
+                }
+            )
+            .semantics { contentDescription = if (isBlocked) "Blocked horizontal line row ${edge.row} column ${edge.col}" else "Horizontal line row ${edge.row} column ${edge.col}" }
+            .testTag("h_edge_${edge.row}_${edge.col}"),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp).height(barThickness).clip(RoundedCornerShape(50)).background(trackColor), contentAlignment = Alignment.CenterStart) {
-            if (claimedBy != 0 || drawProgress > 0.01f) {
-                Box(
-                    modifier = Modifier.fillMaxWidth(drawProgress.coerceIn(0f, 1f)).height(barThickness)
-                        .drawBehind { drawRoundRect(color = ownerColor.copy(alpha = 0.45f * neonGlowPulse), size = size.copy(height = size.height * 2.2f), topLeft = Offset(0f, -size.height * 0.6f)) }
-                        .clip(RoundedCornerShape(50)).background(ownerColor).then(if (isLastClaimed) Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50)) else Modifier)
+        if (isBlocked) {
+            Canvas(modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).height(barThickness)) {
+                drawLine(
+                    color = Color(0xFFEF4444).copy(alpha = 0.3f),
+                    start = Offset(0f, size.height / 2f),
+                    end = Offset(size.width, size.height / 2f),
+                    strokeWidth = barThickness.toPx() * 0.75f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
                 )
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp).height(barThickness).clip(RoundedCornerShape(50)).background(trackColor), contentAlignment = Alignment.CenterStart) {
+                if (claimedBy != 0 || drawProgress > 0.01f) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(drawProgress.coerceIn(0f, 1f)).height(barThickness)
+                            .drawBehind { drawRoundRect(color = ownerColor.copy(alpha = 0.45f * neonGlowPulse), size = size.copy(height = size.height * 2.2f), topLeft = Offset(0f, -size.height * 0.6f)) }
+                            .clip(RoundedCornerShape(50)).background(ownerColor).then(if (isLastClaimed) Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50)) else Modifier)
+                    )
+                }
             }
         }
     }
@@ -3633,7 +4211,7 @@ private fun HorizontalEdgeCell(
 
 @Composable
 private fun VerticalEdgeCell(
-    edge: EdgeCoordinate, claimedBy: Int, isLastClaimed: Boolean, isHoveredExternal: Boolean,
+    edge: EdgeCoordinate, claimedBy: Int, isBlocked: Boolean = false, isLastClaimed: Boolean, isHoveredExternal: Boolean,
     neonGlowPulse: Float, activePlayerColor: Color, slotWidth: Dp, height: Dp,
     onHover: (EdgeCoordinate?) -> Unit, onClick: () -> Unit
 ) {
@@ -3642,8 +4220,8 @@ private fun VerticalEdgeCell(
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    val showHover = claimedBy == 0 && (isHovered || isPressed || isHoveredExternal)
-    LaunchedEffect(isHovered, isPressed) { if (isHovered || isPressed) onHover(edge) }
+    val showHover = !isBlocked && claimedBy == 0 && (isHovered || isPressed || isHoveredExternal)
+    LaunchedEffect(isHovered, isPressed, isBlocked) { if (!isBlocked && (isHovered || isPressed)) onHover(edge) }
 
     val ownerColor = if (claimedBy != 0) playerAccentColor(claimedBy) else Color.Transparent
     val trackColor by animateColorAsState(targetValue = if (showHover) activePlayerColor.copy(alpha = 0.65f) else palette.idleEdge, animationSpec = tween(durationMillis = 180), label = "vEdgeTrackColor")
@@ -3651,16 +4229,41 @@ private fun VerticalEdgeCell(
     val barThickness = 6.dp
 
     Box(
-        modifier = Modifier.width(slotWidth).height(height).hoverable(interactionSource = interactionSource).then(if (claimedBy == 0) Modifier.clickable(interactionSource = interactionSource, indication = null, onClick = onClick) else Modifier).semantics { contentDescription = "Vertical line row ${edge.row} column ${edge.col}" }.testTag("v_edge_${edge.row}_${edge.col}"),
+        modifier = Modifier
+            .width(slotWidth)
+            .height(height)
+            .then(
+                if (!isBlocked) {
+                    Modifier
+                        .hoverable(interactionSource = interactionSource)
+                        .then(if (claimedBy == 0) Modifier.clickable(interactionSource = interactionSource, indication = null, onClick = onClick) else Modifier)
+                } else {
+                    Modifier
+                }
+            )
+            .semantics { contentDescription = if (isBlocked) "Blocked vertical line row ${edge.row} column ${edge.col}" else "Vertical line row ${edge.row} column ${edge.col}" }
+            .testTag("v_edge_${edge.row}_${edge.col}"),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.fillMaxHeight().padding(vertical = 1.dp).width(barThickness).clip(RoundedCornerShape(50)).background(trackColor), contentAlignment = Alignment.TopCenter) {
-            if (claimedBy != 0 || drawProgress > 0.01f) {
-                Box(
-                    modifier = Modifier.fillMaxHeight(drawProgress.coerceIn(0f, 1f)).width(barThickness)
-                        .drawBehind { drawRoundRect(color = ownerColor.copy(alpha = 0.45f * neonGlowPulse), size = size.copy(width = size.width * 2.2f), topLeft = Offset(-size.width * 0.6f, 0f)) }
-                        .clip(RoundedCornerShape(50)).background(ownerColor).then(if (isLastClaimed) Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50)) else Modifier)
+        if (isBlocked) {
+            Canvas(modifier = Modifier.fillMaxHeight().padding(vertical = 2.dp).width(barThickness)) {
+                drawLine(
+                    color = Color(0xFFEF4444).copy(alpha = 0.3f),
+                    start = Offset(size.width / 2f, 0f),
+                    end = Offset(size.width / 2f, size.height),
+                    strokeWidth = barThickness.toPx() * 0.75f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
                 )
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxHeight().padding(vertical = 1.dp).width(barThickness).clip(RoundedCornerShape(50)).background(trackColor), contentAlignment = Alignment.TopCenter) {
+                if (claimedBy != 0 || drawProgress > 0.01f) {
+                    Box(
+                        modifier = Modifier.fillMaxHeight(drawProgress.coerceIn(0f, 1f)).width(barThickness)
+                            .drawBehind { drawRoundRect(color = ownerColor.copy(alpha = 0.45f * neonGlowPulse), size = size.copy(width = size.width * 2.2f), topLeft = Offset(-size.width * 0.6f, 0f)) }
+                            .clip(RoundedCornerShape(50)).background(ownerColor).then(if (isLastClaimed) Modifier.border(1.dp, palette.primaryText, RoundedCornerShape(50)) else Modifier)
+                    )
+                }
             }
         }
     }
@@ -3668,15 +4271,24 @@ private fun VerticalEdgeCell(
 
 @Composable
 private fun PlayableBoxCell(
-    row: Int, col: Int, owner: Int, isNewlyCaptured: Boolean,
-    isInComboChain: Boolean, comboPulseFraction: Float, performanceMode: Boolean = false, size: Dp
+    row: Int, col: Int, owner: Int, isGoldenNode: Boolean = false, neonGlowPulse: Float = 0.8f,
+    isNewlyCaptured: Boolean, isInComboChain: Boolean, comboPulseFraction: Float,
+    performanceMode: Boolean = false, size: Dp
 ) {
     val palette = LocalGamePalette.current
+    val solarFlareGold = ThemeColor.SOLAR_FLARE.primary
     val accentColor = if (owner != 0) playerAccentColor(owner) else Color.Transparent
-    val boxFillColor by animateColorAsState(targetValue = if (owner != 0) accentColor.copy(alpha = 0.40f) else Color.Transparent, animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing), label = "boxFillColorAnim")
+    val targetFillColor = when {
+        owner != 0 && isGoldenNode -> solarFlareGold.copy(alpha = 0.28f)
+        owner != 0 -> accentColor.copy(alpha = 0.40f)
+        isGoldenNode -> solarFlareGold.copy(alpha = (0.08f + 0.12f * neonGlowPulse).coerceIn(0f, 1f))
+        else -> Color.Transparent
+    }
+    val boxFillColor by animateColorAsState(targetValue = targetFillColor, animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing), label = "boxFillColorAnim")
 
     val singleCapturePulse = remember { Animatable(1f) }
     val charJumpScale = remember { Animatable(0.2f) }
+    val goldenFloatOffset = remember { Animatable(0f) }
     LaunchedEffect(owner) {
         if (owner != 0) {
             launch {
@@ -3684,26 +4296,57 @@ private fun PlayableBoxCell(
                 singleCapturePulse.animateTo(targetValue = 1.16f, animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing))
                 singleCapturePulse.animateTo(targetValue = 1.0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
             }
+            launch {
+                goldenFloatOffset.snapTo(12f)
+                goldenFloatOffset.animateTo(targetValue = -4f, animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing))
+                goldenFloatOffset.animateTo(targetValue = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+            }
             charJumpScale.snapTo(0.25f)
             charJumpScale.animateTo(targetValue = 1.75f, animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing))
             charJumpScale.animateTo(targetValue = 1.0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
         } else {
             singleCapturePulse.snapTo(1f)
             charJumpScale.snapTo(0.2f)
+            goldenFloatOffset.snapTo(0f)
         }
     }
 
     val comboBoxScale = if (isNewlyCaptured || isInComboChain) singleCapturePulse.value * (1f + (comboPulseFraction * 0.12f)) else singleCapturePulse.value
 
     Box(
-        modifier = Modifier.size(size).padding(1.5.dp).graphicsLayer { scaleX = comboBoxScale; scaleY = comboBoxScale }.clip(RoundedCornerShape(6.dp)).background(boxFillColor)
-            .then(if ((isNewlyCaptured || isInComboChain) && owner != 0) Modifier.border(width = if (isInComboChain) 2.dp else 1.5.dp, color = if (comboPulseFraction > 0.2f) palette.primaryText else accentColor, shape = RoundedCornerShape(6.dp)) else Modifier)
+        modifier = Modifier
+            .size(size)
+            .padding(1.5.dp)
+            .graphicsLayer { scaleX = comboBoxScale; scaleY = comboBoxScale }
+            .clip(RoundedCornerShape(6.dp))
+            .background(boxFillColor)
+            .then(
+                when {
+                    isGoldenNode && owner == 0 -> Modifier.border(
+                        width = 1.5.dp,
+                        color = solarFlareGold.copy(alpha = (0.45f + 0.55f * neonGlowPulse).coerceIn(0f, 1f)),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    (isNewlyCaptured || isInComboChain) && owner != 0 -> Modifier.border(
+                        width = if (isInComboChain) 2.dp else 1.5.dp,
+                        color = if (isGoldenNode) solarFlareGold else if (comboPulseFraction > 0.2f) palette.primaryText else accentColor,
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    isGoldenNode && owner != 0 -> Modifier.border(
+                        width = 1.5.dp,
+                        color = solarFlareGold.copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    else -> Modifier
+                }
+            )
             .testTag("box_${row}_${col}"),
         contentAlignment = Alignment.Center
     ) {
         if (!performanceMode) {
             if (isNewlyCaptured && comboPulseFraction > 0.02f && owner != 0) {
                 val particleProgress = 1f - comboPulseFraction
+                val particleColor = if (isGoldenNode) solarFlareGold else accentColor
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val center = Offset(this.size.width / 2f, this.size.height / 2f)
                     val maxRadius = this.size.maxDimension * 0.85f
@@ -3713,24 +4356,55 @@ private fun PlayableBoxCell(
                         val distance = maxRadius * particleProgress
                         val px = center.x + (cos(angle) * distance).toFloat()
                         val py = center.y + (sin(angle) * distance).toFloat()
-                        drawCircle(color = accentColor.copy(alpha = comboPulseFraction), radius = (3.5.dp.toPx() * comboPulseFraction).coerceAtLeast(1f), center = Offset(px, py))
+                        drawCircle(color = particleColor.copy(alpha = comboPulseFraction), radius = (3.5.dp.toPx() * comboPulseFraction).coerceAtLeast(1f), center = Offset(px, py))
                     }
                 }
             }
         }
 
-        if (owner != 0) {
+        if (owner == 0 && isGoldenNode) {
             Text(
-                text = if (owner == 1) "P1" else if (owner == 2 && playerAccentColor(2) == ProtocolMagenta) "CPU" else "P$owner",
-                style = MaterialTheme.typography.titleLarge.copy(
+                text = "★",
+                style = MaterialTheme.typography.labelSmall.copy(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Black,
-                    fontSize = when { size >= 44.dp -> 15.sp; size >= 28.dp -> 12.sp; else -> 9.sp },
-                    shadow = Shadow(color = accentColor, offset = Offset.Zero, blurRadius = 14f)
+                    fontSize = when { size >= 44.dp -> 13.sp; size >= 28.dp -> 10.sp; else -> 8.sp },
+                    shadow = Shadow(color = solarFlareGold, offset = Offset.Zero, blurRadius = 12f)
                 ),
-                color = palette.primaryText,
-                modifier = Modifier.scale(charJumpScale.value)
+                color = solarFlareGold.copy(alpha = (0.55f + 0.45f * neonGlowPulse).coerceIn(0f, 1f))
             )
+        } else if (owner != 0) {
+            if (isGoldenNode) {
+                Text(
+                    text = "+2",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Black,
+                        fontSize = when { size >= 44.dp -> 16.sp; size >= 28.dp -> 13.sp; else -> 10.sp },
+                        shadow = Shadow(color = solarFlareGold, offset = Offset.Zero, blurRadius = 16f)
+                    ),
+                    color = solarFlareGold,
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = charJumpScale.value
+                            scaleY = charJumpScale.value
+                            translationY = goldenFloatOffset.value
+                        }
+                        .testTag("golden_bonus_${row}_${col}")
+                )
+            } else {
+                Text(
+                    text = if (owner == 1) "P1" else if (owner == 2 && playerAccentColor(2) == ProtocolMagenta) "CPU" else "P$owner",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Black,
+                        fontSize = when { size >= 44.dp -> 15.sp; size >= 28.dp -> 12.sp; else -> 9.sp },
+                        shadow = Shadow(color = accentColor, offset = Offset.Zero, blurRadius = 14f)
+                    ),
+                    color = palette.primaryText,
+                    modifier = Modifier.scale(charJumpScale.value)
+                )
+            }
         }
     }
 }
@@ -3791,6 +4465,7 @@ private data class ConfettiParticleSpec(val angleRad: Float, val speedFactor: Fl
 @Composable
 private fun FullScreenVictoryAnimationOverlay(
     boardState: BoardState, triggerId: Int, performanceMode: Boolean = false,
+    isRankedMatch: Boolean = false, lastRpChange: Int? = null,
     activeCampaignLevel: CampaignLevel?, justUnlockedNextCampaignLevel: Boolean,
     onAdvanceToNextCampaignLevel: () -> Unit, onPlayAgain: () -> Unit, onReturnToSetup: () -> Unit
 ) {
@@ -3798,6 +4473,11 @@ private fun FullScreenVictoryAnimationOverlay(
     val winner = boardState.winner
     val winnerAccent = if (winner != null && winner > 0) playerAccentColor(winner) else palette.streakAccent
     var isCardDismissed by remember(triggerId, boardState.isGameOver) { mutableStateOf(false) }
+
+    val matchEndTimeMs = remember(triggerId, boardState.isGameOver) { System.currentTimeMillis() }
+    val durationTotalSeconds = ((matchEndTimeMs - boardState.matchStartTimeMs).coerceAtLeast(0L) / 1000L).toInt()
+    val durationMinutes = durationTotalSeconds / 60
+    val durationSeconds = durationTotalSeconds % 60
 
     val burstProgress = remember(triggerId) { Animatable(0f) }
     val glowPulseTransition = rememberInfiniteTransition(label = "victoryGlowTransition")
@@ -3878,6 +4558,55 @@ private fun FullScreenVictoryAnimationOverlay(
                         "$name: ${boardState.scoreForPlayer(p.playerNumber)}" 
                     }
                     Text(text = scoreBreakdown, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold), color = winnerAccent, textAlign = TextAlign.Center)
+
+                    // ADVANCED TELEMETRY SECTION (v3.0.0)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(palette.surfaceElevated)
+                            .border(1.dp, winnerAccent.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                            .testTag("victory_advanced_telemetry_section"),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "ADVANCED TELEMETRY",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.2.sp
+                            ),
+                            color = palette.streakAccent
+                        )
+                        Text(
+                            text = "Match Duration: ${durationMinutes}m ${durationSeconds}s",
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                            color = palette.primaryText,
+                            modifier = Modifier.testTag("telemetry_match_duration")
+                        )
+                        Text(
+                            text = "Longest Combo: ${boardState.longestComboChain} Nodes",
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                            color = palette.primaryText,
+                            modifier = Modifier.testTag("telemetry_longest_combo")
+                        )
+                        if (isRankedMatch) {
+                            val rpChangeVal = lastRpChange ?: if (winner == 1) 25 else -15
+                            val rpFormatted = if (rpChangeVal >= 0) "+$rpChangeVal" else "$rpChangeVal"
+                            val rpColor = if (rpChangeVal >= 0) ProtocolLime else ProtocolMagenta
+                            Text(
+                                text = "RP Change: $rpFormatted",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Black
+                                ),
+                                color = rpColor,
+                                modifier = Modifier.testTag("telemetry_rp_change")
+                            )
+                        }
+                    }
 
                     if (activeCampaignLevel != null) {
                         val campaignStatusText = when {
