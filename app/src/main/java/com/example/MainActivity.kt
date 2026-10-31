@@ -2093,6 +2093,8 @@ fun NeonGridProtocolApp(
                     // Screen 1: The Command Center (Main Menu)
                     ScreenDestination.SETUP -> {
                         CommandCenterScreen(
+                            unlockedAchievements = uiState.unlockedAchievements,
+
                             nodesCaptured = uiState.totalBoxesCaptured,
                             unlockedCampaignLevel = uiState.unlockedCampaignLevel,
                             selectedCampaignLevel = uiState.selectedCampaignLevel,
@@ -2175,6 +2177,8 @@ fun NeonGridProtocolApp(
 @Composable
 fun CommandCenterScreen(
     nodesCaptured: Int = 0,
+    unlockedAchievements: Set<String> = emptySet(),
+
     unlockedCampaignLevel: Int = 1,
     selectedCampaignLevel: CampaignLevel = CampaignLevel.LEVEL_1,
     sessionStats: Map<Int, PlayerSessionStats> = emptyMap(),
@@ -2297,6 +2301,10 @@ fun CommandCenterScreen(
             )
 
             DashboardSessionHistoryCard(
+            DashboardAchievementsCard(
+                unlockedIds = unlockedAchievements
+            )
+
                 sessionStats = sessionStats,
                 matchHistory = matchHistory
             )
@@ -2329,7 +2337,7 @@ private fun CommandCenterHeader(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            text = "NEON GRID PROTOCOL",
+            text = "DOTS AND BOXES",
             style = MaterialTheme.typography.displayLarge.copy(
                 fontFamily = JetBrainsMonoFontFamily,
                 fontWeight = FontWeight.Black,
@@ -2809,6 +2817,87 @@ fun CampaignStageSelectorCard(
                                     color = ProtocolTextMuted
                                 )
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DashboardAchievementsCard(
+    unlockedIds: Set<String>,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, ProtocolBorder, RoundedCornerShape(18.dp))
+            .testTag("dashboard_achievements_card"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = ProtocolCardSurface)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = ProtocolCyan,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "ACHIEVEMENT PROTOCOLS",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = ProtocolCyan
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AchievementProtocol.entries.forEach { ach ->
+                    val isUnlocked = unlockedIds.contains(ach.id)
+                    val accent = if (isUnlocked) ProtocolCyan else ProtocolTextMuted
+                    val bgColor = if (isUnlocked) ProtocolCyan.copy(alpha = 0.1f) else ProtocolElevatedSurface
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(bgColor)
+                            .border(1.dp, if (isUnlocked) ProtocolCyan.copy(alpha = 0.5f) else ProtocolBorder, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isUnlocked) Icons.Filled.EmojiEvents else Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = if (!isUnlocked && ach.isSecret) "???" else ach.title,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = JetBrainsMonoFontFamily
+                                ),
+                                color = if (isUnlocked) ProtocolTextPrimary else ProtocolTextMuted
+                            )
+                            Text(
+                                text = if (!isUnlocked && ach.isSecret) "Secret Achievement" else ach.description,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = ProtocolTextMuted
+                            )
                         }
                     }
                 }
