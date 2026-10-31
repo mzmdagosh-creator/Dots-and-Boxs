@@ -2090,11 +2090,10 @@ fun NeonGridProtocolApp(
                 label = "neonGridProtocolScreenTransition"
             ) { destination ->
                 when (destination) {
-                    // Screen 1: The Command Center (Main Menu)
+                     // Screen 1: The Command Center (Main Menu)
                     ScreenDestination.SETUP -> {
                         CommandCenterScreen(
                             unlockedAchievements = uiState.unlockedAchievements,
-
                             nodesCaptured = uiState.totalBoxesCaptured,
                             unlockedCampaignLevel = uiState.unlockedCampaignLevel,
                             selectedCampaignLevel = uiState.selectedCampaignLevel,
@@ -2106,6 +2105,7 @@ fun NeonGridProtocolApp(
                             onStartCampaignLevel = viewModel::startCampaignLevel
                         )
                     }
+
 
                     // Screen 3: Quick Match Config
                     ScreenDestination.QUICK_CONFIG -> {
