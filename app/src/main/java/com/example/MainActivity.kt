@@ -2175,7 +2175,6 @@ fun NeonGridProtocolApp(
 // ============================================================================
 
 @Composable
-@Composable
 fun CommandCenterScreen(
     unlockedAchievements: Set<String> = emptySet(),
     nodesCaptured: Int = 0,
